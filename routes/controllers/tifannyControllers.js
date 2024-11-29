@@ -23,8 +23,20 @@ const newClientapi = async (req, res) => {
       const collection = pool.db('tifanny').collection('clients');
       const existingClient = await collection.findOne({ id: datos.id });
   
+      // No bloquear el flujo si ya existe un cliente
       if (existingClient) {
-        return res.status(409).json({ message: "El cliente con esta cédula ya existe." });
+        console.log("Cliente con esta cédula ya existe, pero el flujo continúa.");
+        // Puedes agregar una notificación aquí a Tiffany sin detener el flujo.
+        const existingClientWebhook = generateClientWebhook(existingClient.apiKey);
+        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        try {
+          await axios.post(tiffanyWebhook, {
+            message: "Cliente ya existe, pero el flujo continúa.",
+            clientWebhook: existingClientWebhook
+          });
+        } catch (webhookError) {
+          console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
+        }
       }
   
       const apiKey = generateApiKey();
@@ -105,6 +117,7 @@ const newClientapi = async (req, res) => {
       });
     }
   };
+  
   
   module.exports = {
     newClientapi
