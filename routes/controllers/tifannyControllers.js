@@ -63,7 +63,7 @@ const newClientapi = async (req, res) => {
         phone: datos.phone || null,
         apiKey,
         webhook: clientWebhook,
-        webhookInternal: '', // Dejar explícitamente vacío si no se proporciona
+        webhookInternal: datos.webhookInternal || null,  // Aquí se toma directamente desde la solicitud
         wallets: datos.wallets || [],
         address: {
           street: datos.address?.street || null,
@@ -98,7 +98,6 @@ const newClientapi = async (req, res) => {
           createdAt: datos.metadata?.createdAt || new Date()
         }
       };
-  
       // Insertar el nuevo cliente en la base de datos
       await collection.insertOne(newClientData);
   
