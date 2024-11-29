@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { } =require('./controllers/tifannyControllers');
+const { newClientapi } =require('./controllers/tifannyControllers');
 
 
+router.post('/newClient', newClientapi);
 
 
 
