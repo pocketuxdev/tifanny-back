@@ -1,11 +1,15 @@
 const pool = require('../../database/mongo')
 const axios = require('axios');
 const moment = require('moment-timezone');
+
+
+// Modificación del código para asegurarse de que 'webhookInternal' quede vacío si no se pasa en los datos
 const newClientapi = async (req, res) => {
     const datos = req.body;
   
+    // Función para generar una API key única de 10 caracteres (solo letras mayúsculas y minúsculas)
     const generateApiKey = () => {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
       let apiKey = '';
       for (let i = 0; i < 10; i++) {
         apiKey += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -13,36 +17,45 @@ const newClientapi = async (req, res) => {
       return apiKey;
     };
   
+    // Función para generar un webhook único para el cliente usando su API key
     const generateClientWebhook = (apiKey) => {
-      const baseUrl = 'https://api.tiffany.com/webhooks';
+      const baseUrl = 'https://api.tiffany.com/webhooks'; // Base para los webhooks de clientes
       return `${baseUrl}/${apiKey}`;
     };
   
     try {
-      const collection = pool.db('tifanny').collection('clients');
+      // Verificar si la colección 'clients' existe, si no, crearla
+      const collection = pool.db('pocketux').collection('clients');
+  
+      // Verificar si el cliente ya existe usando el campo "id" (cédula)
       const existingClient = await collection.findOne({ id: datos.id });
   
-      // Si el cliente ya existe, retornamos un mensaje y no continuamos con la creación
       if (existingClient) {
-        console.log("Cliente con esta cédula ya existe.");
-        // Puedes agregar una notificación aquí a Tiffany sin detener el flujo.
-        const existingClientWebhook = generateClientWebhook(existingClient.apiKey);
-        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        // Si el cliente ya existe, enviar un mensaje de éxito a Tiffany
+        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc'; 
+  
         try {
-          await axios.post(tiffanyWebhook, {
-            message: "Cliente ya existe, no se crea nuevo.",
-            clientWebhook: existingClientWebhook
+          await axios.post(tiffanyWebhook, { 
+            message: "El cliente ya está registrado con éxito", 
+            clientWebhook: existingClient.webhook 
           });
         } catch (webhookError) {
           console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
         }
   
-        return res.status(409).json({ message: "El cliente con esta cédula ya existe." }); // Respondemos con un 409 Conflict
+        return res.status(200).json({ 
+          message: "Cliente ya existe, pero se procesa correctamente.", 
+          client: { ...existingClient } 
+        });
       }
   
+      // Generar la API Key
       const apiKey = generateApiKey();
+  
+      // Generar el webhook único para el cliente usando su API key
       const clientWebhook = generateClientWebhook(apiKey);
   
+      // Crear la estructura del cliente
       const newClientData = {
         fullName: datos.fullName || null,
         email: datos.email || null,
@@ -50,7 +63,7 @@ const newClientapi = async (req, res) => {
         phone: datos.phone || null,
         apiKey,
         webhook: clientWebhook,
-        webhookInternal: datos.webhookInternal || null,
+        webhookInternal: '', // Dejar explícitamente vacío si no se proporciona
         wallets: datos.wallets || [],
         address: {
           street: datos.address?.street || null,
@@ -86,36 +99,27 @@ const newClientapi = async (req, res) => {
         }
       };
   
-      const result = await collection.insertOne(newClientData);
+      // Insertar el nuevo cliente en la base de datos
+      await collection.insertOne(newClientData);
   
-      if (result.acknowledged) {
-        const createdClient = await collection.findOne({ _id: result.insertedId });
-  
-        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
-  
-        // Notificar a Tiffany
-        try {
-          await axios.post(tiffanyWebhook, {
-            message: "Cliente creado con éxito",
-            clientWebhook: createdClient.webhook
-          });
-        } catch (webhookError) {
-          console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
-        }
-  
-        return res.status(201).json({
-          message: "Cliente creado con éxito.",
-          client: createdClient
+      // Enviar un mensaje a Tiffany con los detalles del nuevo cliente
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc'; 
+      try {
+        await axios.post(tiffanyWebhook, { 
+          message: "Nuevo cliente registrado exitosamente",
+          clientWebhook: clientWebhook
         });
+      } catch (webhookError) {
+        console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
       }
   
-      return res.status(500).json({ message: "Error al insertar el cliente en la base de datos." });
-    } catch (error) {
-      console.error('Error al crear el cliente:', error);
-      return res.status(500).json({
-        message: "Error interno del servidor.",
-        error: error.message
+      return res.status(201).json({ 
+        message: "Cliente registrado con éxito", 
+        client: newClientData 
       });
+    } catch (error) {
+      console.error('Error al crear el cliente:', error.message);
+      return res.status(500).json({ message: 'Error al crear el cliente', error: error.message });
     }
   };
   
