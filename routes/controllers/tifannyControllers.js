@@ -232,7 +232,7 @@ const newClientapi = async (req, res) => {
       });
   
       // Retornar mensaje de error
-      return res.status(200).json({ 
+      return res.status(202).json({ 
         message: "Error al procesar la solicitud de cliente.", 
         success: false 
       });
