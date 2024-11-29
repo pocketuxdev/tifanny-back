@@ -43,7 +43,7 @@ const newClientapi = async (req, res) => {
           console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
         }
   
-        return res.status(200).json({ 
+        return res.status(201).json({ 
           message: "Cliente ya existe, pero se procesa correctamente.", 
           client: { ...existingClient } 
         });
@@ -112,7 +112,7 @@ const newClientapi = async (req, res) => {
         console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
       }
   
-      return res.status(201).json({ 
+      return res.status(200).json({ 
         message: "Cliente registrado con éxito", 
         client: newClientData 
       });
