@@ -238,11 +238,135 @@ const newClientapi = async (req, res) => {
       });
     }
   };
+
+  const updateClientapi = async (req, res) => {
+    const { id } = req.params; // Cédula o ID del cliente
+    const newData = req.body; // Datos nuevos que se desean actualizar
+  
+    try {
+      // Conexión a las colecciones 'clients' y 'clientChangesLog'
+      const clientsCollection = pool.db('pocketux').collection('clients');
+      const changesLogCollection = pool.db('pocketux').collection('clientChangesLog');
+  
+      // Obtener los datos actuales del cliente
+      const existingClient = await clientsCollection.findOne({ id });
+  
+      if (!existingClient) {
+        // Notificar al webhook
+        const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        await axios.post(webhookUrl, { 
+          message: "Cliente no encontrado.", 
+          success: false 
+        }).catch((webhookError) => {
+          console.error('Error al enviar el webhook:', webhookError.message);
+        });
+  
+        return res.status(201).json({ message: "Cliente no encontrado.", success: false });
+      }
+  
+      // Log de los cambios realizados
+      const changesLog = [];
+  
+      // Comparamos los campos nuevos con los actuales y generamos el log
+      for (const key in newData) {
+        if (newData[key] !== existingClient[key]) {
+          changesLog.push({
+            field: key,
+            oldValue: existingClient[key],
+            newValue: newData[key],
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+  
+      // Si no hubo cambios, devolver un mensaje informativo
+      if (changesLog.length === 0) {
+        return res.status(201).json({ 
+          message: "No hay cambios para actualizar.", 
+          success: false 
+        });
+      }
+  
+      // Guardar los cambios en la nueva colección de logs
+      const logEntry = {
+        clientId: id, // ID del cliente
+        changes: changesLog, // Cambios realizados
+        updatedBy: "admin", // Quién realiza la actualización
+        timestamp: new Date().toISOString() // Fecha de la actualización
+      };
+  
+      await changesLogCollection.insertOne(logEntry); // Insertar el log en la nueva colección
+  
+      // Actualizar el cliente con los nuevos datos
+      const updatedClientData = {
+        ...existingClient,
+        ...newData,
+        metadata: {
+          ...existingClient.metadata,
+          lastUpdatedAt: new Date().toISOString()
+        }
+      };
+  
+      // Actualizar los datos del cliente en la colección 'clients'
+      const result = await clientsCollection.updateOne({ id }, { $set: updatedClientData });
+  
+      if (result.modifiedCount > 0) {
+        // Enviar mensaje al webhook para notificar el éxito
+        const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc'; 
+        await axios.post(webhookUrl, { 
+          message: "Cliente actualizado con éxito", 
+          success: true 
+        }).catch((webhookError) => {
+          console.error('Error al enviar el webhook:', webhookError.message);
+        });
+  
+        return res.status(200).json({ 
+          message: "Cliente actualizado con éxito.", 
+          success: true, 
+          updatedClient: updatedClientData 
+        });
+      } else {
+        // Notificar al webhook que no se pudo actualizar el cliente
+        const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc'; 
+        await axios.post(webhookUrl, { 
+          message: "Error al actualizar el cliente.", 
+          success: false 
+        }).catch((webhookError) => {
+          console.error('Error al enviar el webhook:', webhookError.message);
+        });
+  
+        return res.status(201).json({ 
+          message: "Error al actualizar el cliente.", 
+          success: false 
+        });
+      }
+    } catch (error) {
+      console.error('Error al actualizar el cliente:', error);
+  
+      // Notificar al webhook del error
+      const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(webhookUrl, { 
+        message: "Error interno al procesar la solicitud de actualización.", 
+        error: error.message, 
+        success: false 
+      }).catch((webhookError) => {
+        console.error('Error al enviar el webhook:', webhookError.message);
+      });
+  
+      // Retornar mensaje de error
+      return res.status(202).json({ 
+        message: "Error interno al procesar la solicitud de actualización.", 
+        success: false 
+      });
+    }
+  };
+  
   
   
   
   module.exports = {
     newClientapi,
     getAllClientsapi,
-    getClientByCriteriaapi
+    getClientByCriteriaapi,
+    updateClientapi
   };
