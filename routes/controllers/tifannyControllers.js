@@ -122,7 +122,44 @@ const newClientapi = async (req, res) => {
     }
   };
   
+  const getAllClientsapi = async (req, res) => {
+    try {
+      // Conectarse a la colección 'clients' en la base de datos 'pocketux'
+      const collection = pool.db('pocketux').collection('clients');
+      
+      // Obtener todos los clientes registrados en la colección
+      const clients = await collection.find({}).toArray();
+  
+      // Verificar si se encontraron clientes
+      if (clients.length === 0) {
+        return res.status(201).json({ message: "No se pudo encontrar los clientes." });
+      }
+  
+      // Enviar mensaje de éxito al webhook de Tiffany
+      const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc'; 
+  
+      try {
+        await axios.post(webhookUrl, { message: "Clientes encontrados con éxito", data: clients });
+      } catch (webhookError) {
+        console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
+      }
+  
+      // Retornar los clientes encontrados como respuesta
+      res.status(200).json({ 
+        message: "Clientes encontrados con éxito.", 
+        clients 
+      });
+    } catch (error) {
+      console.error('Error al obtener los clientes:', error);
+      res.status(500).json({ 
+        message: "Error interno del servidor.", 
+        error: error.message 
+      });
+    }
+  };
+  
   
   module.exports = {
-    newClientapi
+    newClientapi,
+    getAllClientsapi
   };
