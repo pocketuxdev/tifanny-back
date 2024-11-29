@@ -361,6 +361,111 @@ const newClientapi = async (req, res) => {
     }
   };
   
+  const deleteClientapi = async (req, res) => {
+    const { id } = req.params;
+    const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    const deletedBy = "admin"; // Usuario que realiza la eliminación (puedes ajustarlo dinámicamente)
+  
+    try {
+      // Conexión a las colecciones
+      const clientsCollection = pool.db('pocketux').collection('clients');
+      const historyCollection = pool.db('pocketux').collection('clientshistory');
+  
+      // Buscar al cliente en la colección clients
+      const clientToDelete = await clientsCollection.findOne({ id });
+  
+      if (!clientToDelete) {
+        // Notificar a Tiffany sobre la falla
+        await axios.post(tiffanyWebhook, { 
+          message: "Cliente no encontrado para eliminar", 
+          clientId: id,
+          success: false 
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(202).json({ 
+          message: "Cliente no encontrado para eliminar.", 
+          success: false 
+        });
+      }
+  
+      // Agregar datos adicionales para el historial
+      const clientHistoryData = {
+        ...clientToDelete,
+        deletedAt: new Date().toISOString(), // Fecha y hora de eliminación
+        deletedBy // Quién realizó la eliminación
+      };
+  
+      // Mover el cliente a la colección clientshistory
+      const moveToHistory = await historyCollection.insertOne(clientHistoryData);
+  
+      if (!moveToHistory.acknowledged) {
+        // Notificar a Tiffany sobre la falla
+        await axios.post(tiffanyWebhook, { 
+          message: "Error al mover cliente a clientshistory", 
+          clientId: id,
+          success: false 
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(202).json({ 
+          message: "Error al guardar el cliente en el historial.", 
+          success: false 
+        });
+      }
+  
+      // Eliminar al cliente de la colección clients
+      const deleteFromClients = await clientsCollection.deleteOne({ id });
+  
+      if (deleteFromClients.deletedCount === 1) {
+        // Consultar los datos del cliente en clientshistory
+        const clientHistoryRecord = await historyCollection.findOne({ id });
+  
+        // Filtrar los campos que contienen datos (no son null, undefined o vacíos)
+        const clientHistoryDataFiltered = Object.fromEntries(
+          Object.entries(clientHistoryRecord).filter(([key, value]) => value != null && value !== '')
+        );
+  
+        // Notificar a Tiffany sobre el éxito y enviar los datos del cliente eliminado
+        await axios.post(tiffanyWebhook, { 
+          message: "Cliente eliminado con éxito", 
+          clientData: clientHistoryDataFiltered, // Datos filtrados del cliente eliminado
+          success: true 
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(200).json({ 
+          message: "Cliente eliminado con éxito.", 
+          success: true,
+          clientData: clientHistoryDataFiltered // Devolver los datos del cliente con solo los campos relevantes
+        });
+      } else {
+        // Notificar a Tiffany sobre la falla
+        await axios.post(tiffanyWebhook, { 
+          message: "Error al eliminar cliente de la colección", 
+          clientId: id,
+          success: false 
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(202).json({ 
+          message: "Error al eliminar el cliente de la colección.", 
+          success: false 
+        });
+      }
+    } catch (error) {
+      console.error('Error al eliminar cliente:', error);
+      // Notificar a Tiffany sobre el error
+      await axios.post(tiffanyWebhook, { 
+        message: "Error interno del servidor al intentar eliminar cliente", 
+        clientId: id,
+        success: false 
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+      return res.status(202).json({ 
+        message: "Error interno del servidor al intentar eliminar cliente.", 
+        success: false 
+      });
+    }
+  };
+  
+  
   
   
   
@@ -368,5 +473,6 @@ const newClientapi = async (req, res) => {
     newClientapi,
     getAllClientsapi,
     getClientByCriteriaapi,
-    updateClientapi
+    updateClientapi,
+    deleteClientapi
   };
