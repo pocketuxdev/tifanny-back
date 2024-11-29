@@ -157,9 +157,92 @@ const newClientapi = async (req, res) => {
       });
     }
   };
+  const getClientByCriteriaapi = async (req, res) => {
+    const { id, phone, email, fullName, companyName, companyId } = req.query; // Obtener parámetros de la query
+  
+    try {
+      // Verificar que al menos uno de los parámetros esté presente
+      if (!id && !phone && !email && !fullName && !companyName && !companyId) {
+        return res.status(201).json({ 
+          message: "Debe proporcionar al menos uno de los siguientes parámetros: id, phone, email, fullName, companyName, companyId.", 
+          success: false 
+        });
+      }
+  
+      // Crear un objeto con los filtros basados en los parámetros recibidos
+      const filters = {};
+      if (id) filters.id = id;
+      if (phone) filters.phone = phone;
+      if (email) filters.email = email;
+      if (fullName) filters.fullName = { $regex: fullName, $options: 'i' }; // Búsqueda insensible a mayúsculas
+      if (companyName) filters['company.name'] = { $regex: companyName, $options: 'i' }; // Búsqueda insensible a mayúsculas
+      if (companyId) filters['company.id'] = companyId;
+  
+      // Conectarse a la colección 'clients' en la base de datos 'pocketux'
+      const collection = pool.db('pocketux').collection('clients');
+  
+      // Buscar el cliente con los filtros aplicados
+      const client = await collection.findOne(filters);
+  
+      // Verificar si se encontró el cliente
+      if (!client) {
+        // Notificar al webhook
+        const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        await axios.post(webhookUrl, { 
+          message: "Cliente no encontrado con los criterios proporcionados.", 
+          success: false 
+        }).catch((webhookError) => {
+          console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
+        });
+  
+        return res.status(201).json({ 
+          message: "Cliente no encontrado con los criterios proporcionados.", 
+          success: false 
+        });
+      }
+  
+      // Enviar mensaje de éxito al webhook de Tiffany
+      const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(webhookUrl, { 
+        message: "Cliente encontrado con éxito", 
+        data: client, 
+        success: true 
+      }).catch((webhookError) => {
+        console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
+      });
+  
+      // Retornar el cliente encontrado como respuesta
+      return res.status(200).json({ 
+        message: "Cliente encontrado con éxito.", 
+        success: true, 
+        client 
+      });
+    } catch (error) {
+      // Manejar errores como mensajes
+      console.error('Error al obtener el cliente:', error);
+  
+      // Notificar al webhook del error sin interrumpir
+      const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(webhookUrl, { 
+        message: "Error al procesar la solicitud de cliente.", 
+        error: error.message, 
+        success: false 
+      }).catch((webhookError) => {
+        console.error('Error al enviar el webhook a Tiffany:', webhookError.message);
+      });
+  
+      // Retornar mensaje de error
+      return res.status(200).json({ 
+        message: "Error al procesar la solicitud de cliente.", 
+        success: false 
+      });
+    }
+  };
+  
   
   
   module.exports = {
     newClientapi,
-    getAllClientsapi
+    getAllClientsapi,
+    getClientByCriteriaapi
   };
