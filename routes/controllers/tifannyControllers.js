@@ -469,7 +469,7 @@ const newClientapi = async (req, res) => {
   
  
   
-  const newProductapi = async (req, res) => {
+  const newProductapi = async (req, res) => { 
     const { name, description, category, price, availability, tags } = req.body;
   
     // Validación de los datos
@@ -482,7 +482,7 @@ const newClientapi = async (req, res) => {
         success: false 
       }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-      return res.status(400).json({ message, success: false });
+      return res.status(201).json({ message, success: false });
     }
   
     try {
@@ -516,7 +516,7 @@ const newClientapi = async (req, res) => {
           success: true 
         }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-        return res.status(201).json({ 
+        return res.status(200).json({ 
           message: "Nuevo producto creado con éxito.", 
           success: true, 
           product: newProduct 
@@ -529,7 +529,7 @@ const newClientapi = async (req, res) => {
           success: false 
         }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-        return res.status(500).json({ 
+        return res.status(202).json({ 
           message: "Error al crear el nuevo producto.", 
           success: false 
         });
@@ -552,8 +552,123 @@ const newClientapi = async (req, res) => {
     }
   };
   
-
+ /*---------------------------------Relacion productos and clientes(cotizacion)--------------------------------------------------------------*/
   
+ 
+ const createQuotation = async (req, res) => {
+  const { clientId, productId } = req.body; // Datos que nos llegan desde el body
+  const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+
+  try {
+    // Conexión a las colecciones
+    const clientsCollection = pool.db('pocketux').collection('clients');
+    const productsCollection = pool.db('pocketux').collection('products');
+    const quotationsCollection = pool.db('pocketux').collection('quotations');
+
+    // Obtener el cliente por su ID (cedula)
+    const client = await clientsCollection.findOne({ id: clientId });
+
+    if (!client) {
+      // Cliente no encontrado, respondemos con código 201
+      await axios.post(tiffanyWebhook, {
+        message: "Cliente no encontrado para la cotización.",
+        clientId,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(201).json({ message: "No se encontraron clientes.", success: false });
+    }
+
+    // Obtener el producto por su ID
+    const product = await productsCollection.findOne({ product_id: productId });
+
+    if (!product) {
+      // Producto no encontrado, respondemos con código 201
+      await axios.post(tiffanyWebhook, {
+        message: "Producto no encontrado para la cotización.",
+        productId,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(201).json({ message: "Producto no encontrado.", success: false });
+    }
+
+    // Crear el objeto de cotización con los datos obtenidos
+    const quotation = {
+      clientId: client.id, // Cedula del cliente
+      clientName: client.name, // Nombre del cliente
+      clientEmail: client.email, // Correo del cliente
+      clientPhone: client.phone, // Teléfono del cliente
+      productId: product.product_id, // ID del producto
+      productName: product.name, // Nombre del producto
+      productDescription: product.description, // Descripción del producto
+      productPrice: product.price.amount, // Precio del producto
+      status: "quoting", // Estado de la cotización
+      createdAt: new Date().toISOString(), // Fecha de creación
+      updatedAt: new Date().toISOString(), // Fecha de actualización
+    };
+
+    // Insertar la cotización en la colección 'quotations'
+    const result = await quotationsCollection.insertOne(quotation);
+
+    if (!result.acknowledged) {
+      // Error al crear la cotización, respondemos con código 202
+      await axios.post(tiffanyWebhook, {
+        message: "Error al crear la cotización.",
+        clientId,
+        productId,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(202).json({ message: "Error al crear la cotización.", success: false });
+    }
+
+    // Actualizar el estado del producto a "quoting" en la colección 'products'
+    const updateProduct = await productsCollection.updateOne(
+      { product_id: productId },
+      { $set: { status: "quoting", clientId: client.id } }
+    );
+
+    if (updateProduct.modifiedCount === 1) {
+      // Actualización exitosa del producto, respondemos con código 200
+      await axios.post(tiffanyWebhook, {
+        message: "Cotización creada y estado del producto actualizado.",
+        clientId,
+        productId,
+        success: true
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(200).json({
+        message: "Cotización creada y estado del producto actualizado con éxito.",
+        success: true,
+        quotation: quotation
+      });
+    } else {
+      // Error al actualizar el estado del producto, respondemos con código 202
+      await axios.post(tiffanyWebhook, {
+        message: "Error al actualizar el estado del producto.",
+        productId,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(202).json({ message: "Error al actualizar el estado del producto.", success: false });
+    }
+  } catch (error) {
+    console.error('Error al crear cotización:', error);
+
+    // Error en el procesamiento, respondemos con código 500
+    await axios.post(tiffanyWebhook, {
+      message: "Error interno al procesar la cotización.",
+      error: error.message,
+      success: false
+    }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(500).json({
+      message: "Error interno al procesar la cotización.",
+      success: false
+    });
+  }
+};
   
   
   
@@ -563,5 +678,6 @@ const newClientapi = async (req, res) => {
     getClientByCriteriaapi,
     updateClientapi,
     deleteClientapi,
-    newProductapi
+    newProductapi,
+    createQuotation
   };
