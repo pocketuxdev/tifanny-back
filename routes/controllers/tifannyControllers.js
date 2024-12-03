@@ -555,7 +555,7 @@ const newClientapi = async (req, res) => {
  /*---------------------------------Relacion productos and clientes(cotizacion)--------------------------------------------------------------*/
   
  
- const createQuotation = async (req, res) => {
+ const createQuotationapi = async (req, res) => {
   const { clientId, productId } = req.body; // Datos que nos llegan desde el body
   const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
 
@@ -679,5 +679,5 @@ const newClientapi = async (req, res) => {
     updateClientapi,
     deleteClientapi,
     newProductapi,
-    createQuotation
+    createQuotationapi
   };
