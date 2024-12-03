@@ -464,6 +464,129 @@ const newClientapi = async (req, res) => {
       });
     }
   };
+  const newProductapi = async (req, res) => {
+    const productData = req.body; // Datos del producto enviados en el body
+    const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+  
+    try {
+      // Validar que los campos obligatorios están presentes
+      const requiredFields = ["product_id", "name", "description", "category", "price", "availability", "agent"];
+      for (const field of requiredFields) {
+        if (!productData[field]) {
+          // Respuesta uniforme con código 202
+          await axios.post(webhookUrl, {
+            message: `El campo ${field} es obligatorio.`,
+            success: false,
+          }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+          return res.status(202).json({
+            message: `El campo ${field} es obligatorio.`,
+            success: false
+          });
+        }
+      }
+  
+      // Validar estructura del precio
+      if (
+        !productData.price.currency ||
+        !productData.price.amount ||
+        typeof productData.price.amount !== "number"
+      ) {
+        await axios.post(webhookUrl, {
+          message: "El campo 'price' debe contener 'currency' y un 'amount' numérico.",
+          success: false,
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(202).json({
+          message: "El campo 'price' debe contener 'currency' y un 'amount' numérico.",
+          success: false
+        });
+      }
+  
+      // Validar estructura del agente
+      if (
+        !productData.agent.agent_id ||
+        !productData.agent.name ||
+        !productData.agent.contact_info ||
+        !productData.agent.contact_info.email
+      ) {
+        await axios.post(webhookUrl, {
+          message: "El campo 'agent' debe incluir 'agent_id', 'name' y 'contact_info' con 'email'.",
+          success: false,
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(202).json({
+          message: "El campo 'agent' debe incluir 'agent_id', 'name' y 'contact_info' con 'email'.",
+          success: false
+        });
+      }
+  
+      // Conectar con la colección de productos
+      const productsCollection = pool.db('pocketux').collection('products');
+  
+      // Verificar si el producto ya existe (por product_id)
+      const existingProduct = await productsCollection.findOne({ product_id: productData.product_id });
+      if (existingProduct) {
+        await axios.post(webhookUrl, {
+          message: "El producto ya existe con el mismo 'product_id'.",
+          success: false,
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(202).json({
+          message: "El producto ya existe con el mismo 'product_id'.",
+          success: false
+        });
+      }
+  
+      // Agregar timestamps al producto
+      const now = new Date().toISOString();
+      productData.created_at = now;
+      productData.updated_at = now;
+  
+      // Insertar el nuevo producto en la colección
+      const insertResult = await productsCollection.insertOne(productData);
+  
+      if (insertResult.acknowledged) {
+        // Notificar al webhook sobre el éxito
+        await axios.post(webhookUrl, {
+          message: "Producto creado con éxito.",
+          success: true,
+          product_id: productData.product_id
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(200).json({
+          message: "Producto creado con éxito.",
+          success: true,
+          product_id: productData.product_id
+        });
+      } else {
+        // Error al guardar el producto
+        await axios.post(webhookUrl, {
+          message: "Error al crear el producto.",
+          success: false,
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(202).json({
+          message: "Error al crear el producto.",
+          success: false
+        });
+      }
+    } catch (error) {
+      console.error('Error al crear el producto:', error);
+  
+      // Notificar al webhook sobre el error interno
+      await axios.post(webhookUrl, {
+        message: "Error interno del servidor al intentar crear el producto.",
+        success: false,
+        error: error.message
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+      return res.status(202).json({
+        message: "Error interno del servidor al intentar crear el producto.",
+        success: false
+      });
+    }
+  };
   
   
   
@@ -474,5 +597,6 @@ const newClientapi = async (req, res) => {
     getAllClientsapi,
     getClientByCriteriaapi,
     updateClientapi,
-    deleteClientapi
+    deleteClientapi,
+    newProductapi
   };
