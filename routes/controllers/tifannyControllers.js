@@ -569,7 +569,6 @@ const newClientapi = async (req, res) => {
     const client = await clientsCollection.findOne({ id: clientId });
 
     if (!client) {
-      // Cliente no encontrado, respondemos con código 201
       await axios.post(tiffanyWebhook, {
         message: "Cliente no encontrado para la cotización.",
         clientId,
@@ -583,7 +582,6 @@ const newClientapi = async (req, res) => {
     const product = await productsCollection.findOne({ product_id: productId });
 
     if (!product) {
-      // Producto no encontrado, respondemos con código 201
       await axios.post(tiffanyWebhook, {
         message: "Producto no encontrado para la cotización.",
         productId,
@@ -593,10 +591,31 @@ const newClientapi = async (req, res) => {
       return res.status(201).json({ message: "Producto no encontrado.", success: false });
     }
 
-    // Crear el objeto de cotización con los datos obtenidos
+    // Verificar si ya existe una cotización para este cliente y producto
+    const existingQuotation = await quotationsCollection.findOne({
+      clientId: client.id,
+      productId: product.product_id
+    });
+
+    if (existingQuotation) {
+      await axios.post(tiffanyWebhook, {
+        message: "Cotización ya existente.",
+        clientId,
+        productId,
+        success: true
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(202).json({
+        message: "Cotización ya realizada previamente.",
+        success: true,
+        quotation: existingQuotation // Muestra la cotización existente
+      });
+    }
+
+    // Crear el objeto de cotización
     const quotation = {
       clientId: client.id, // Cedula del cliente
-      clientfullName: client.fullname, // Nombre del cliente
+      clientFullName: client.fullName, // Nombre completo del cliente
       clientEmail: client.email, // Correo del cliente
       clientPhone: client.phone, // Teléfono del cliente
       productId: product.product_id, // ID del producto
@@ -612,7 +631,6 @@ const newClientapi = async (req, res) => {
     const result = await quotationsCollection.insertOne(quotation);
 
     if (!result.acknowledged) {
-      // Error al crear la cotización, respondemos con código 202
       await axios.post(tiffanyWebhook, {
         message: "Error al crear la cotización.",
         clientId,
@@ -630,7 +648,6 @@ const newClientapi = async (req, res) => {
     );
 
     if (updateProduct.modifiedCount === 1) {
-      // Actualización exitosa del producto, respondemos con código 200
       await axios.post(tiffanyWebhook, {
         message: "Cotización creada y estado del producto actualizado.",
         clientId,
@@ -644,7 +661,6 @@ const newClientapi = async (req, res) => {
         quotation: quotation
       });
     } else {
-      // Error al actualizar el estado del producto, respondemos con código 202
       await axios.post(tiffanyWebhook, {
         message: "Error al actualizar el estado del producto.",
         productId,
@@ -656,7 +672,6 @@ const newClientapi = async (req, res) => {
   } catch (error) {
     console.error('Error al crear cotización:', error);
 
-    // Error en el procesamiento, respondemos con código 500
     await axios.post(tiffanyWebhook, {
       message: "Error interno al procesar la cotización.",
       error: error.message,
@@ -669,7 +684,7 @@ const newClientapi = async (req, res) => {
     });
   }
 };
-  
+
   
   
   module.exports = {
