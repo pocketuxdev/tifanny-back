@@ -552,8 +552,7 @@ const newClientapi = async (req, res) => {
     }
   };
   
-  module.exports = { newProductapi };
-  
+
   
   
   
