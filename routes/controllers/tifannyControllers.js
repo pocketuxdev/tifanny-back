@@ -596,7 +596,7 @@ const newClientapi = async (req, res) => {
     // Crear el objeto de cotización con los datos obtenidos
     const quotation = {
       clientId: client.id, // Cedula del cliente
-      clientName: client.name, // Nombre del cliente
+      clientfullName: client.fullname, // Nombre del cliente
       clientEmail: client.email, // Correo del cliente
       clientPhone: client.phone, // Teléfono del cliente
       productId: product.product_id, // ID del producto
