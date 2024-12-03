@@ -1,7 +1,7 @@
 const pool = require('../../database/mongo')
 const axios = require('axios');
 const moment = require('moment-timezone');
-
+const { v4: uuidv4 } = require('uuid');
 
 // Modificación del código para asegurarse de que 'webhookInternal' quede vacío si no se pasa en los datos
 const newClientapi = async (req, res) => {
@@ -466,8 +466,8 @@ const newClientapi = async (req, res) => {
   };
 
   /*---------------------------------productos--------------------------------------------------------------*/
-  const { v4: uuidv4 } = require('uuid');
-  const axios = require('axios');
+  
+ 
   
   const newProductapi = async (req, res) => {
     const { name, description, category, price, availability, tags } = req.body;
