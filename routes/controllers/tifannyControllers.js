@@ -464,129 +464,95 @@ const newClientapi = async (req, res) => {
       });
     }
   };
+
+  /*---------------------------------productos--------------------------------------------------------------*/
+  const { v4: uuidv4 } = require('uuid');
+  const axios = require('axios');
+  
   const newProductapi = async (req, res) => {
-    const productData = req.body; // Datos del producto enviados en el body
-    const webhookUrl = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    const { name, description, category, price, availability, tags } = req.body;
+  
+    // Validación de los datos
+    if (!name || !description || !category || !price || !availability || !tags) {
+      const message = 'Faltan datos obligatorios en la solicitud.';
+      // Notificar a Tiffany sobre el error
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, { 
+        message: message, 
+        success: false 
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+      return res.status(400).json({ message, success: false });
+    }
   
     try {
-      // Validar que los campos obligatorios están presentes
-      const requiredFields = ["product_id", "name", "description", "category", "price", "availability", "agent"];
-      for (const field of requiredFields) {
-        if (!productData[field]) {
-          // Respuesta uniforme con código 202
-          await axios.post(webhookUrl, {
-            message: `El campo ${field} es obligatorio.`,
-            success: false,
-          }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
-  
-          return res.status(202).json({
-            message: `El campo ${field} es obligatorio.`,
-            success: false
-          });
-        }
-      }
-  
-      // Validar estructura del precio
-      if (
-        !productData.price.currency ||
-        !productData.price.amount ||
-        typeof productData.price.amount !== "number"
-      ) {
-        await axios.post(webhookUrl, {
-          message: "El campo 'price' debe contener 'currency' y un 'amount' numérico.",
-          success: false,
-        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
-  
-        return res.status(202).json({
-          message: "El campo 'price' debe contener 'currency' y un 'amount' numérico.",
-          success: false
-        });
-      }
-  
-      // Validar estructura del agente
-      if (
-        !productData.agent.agent_id ||
-        !productData.agent.name ||
-        !productData.agent.contact_info ||
-        !productData.agent.contact_info.email
-      ) {
-        await axios.post(webhookUrl, {
-          message: "El campo 'agent' debe incluir 'agent_id', 'name' y 'contact_info' con 'email'.",
-          success: false,
-        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
-  
-        return res.status(202).json({
-          message: "El campo 'agent' debe incluir 'agent_id', 'name' y 'contact_info' con 'email'.",
-          success: false
-        });
-      }
-  
-      // Conectar con la colección de productos
       const productsCollection = pool.db('pocketux').collection('products');
+      
+      // Generar el ID único para el producto
+      const newProduct = {
+        product_id: uuidv4(),
+        name,
+        description,
+        category,
+        price: {
+          currency: price.currency || 'USD',
+          amount: price.amount || 0
+        },
+        availability,
+        tags,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
   
-      // Verificar si el producto ya existe (por product_id)
-      const existingProduct = await productsCollection.findOne({ product_id: productData.product_id });
-      if (existingProduct) {
-        await axios.post(webhookUrl, {
-          message: "El producto ya existe con el mismo 'product_id'.",
-          success: false,
+      // Insertar el producto en la colección
+      const result = await productsCollection.insertOne(newProduct);
+  
+      if (result.acknowledged) {
+        // Notificar a Tiffany sobre el éxito
+        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        await axios.post(tiffanyWebhook, { 
+          message: "Nuevo producto creado con éxito", 
+          productData: newProduct, 
+          success: true 
         }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-        return res.status(202).json({
-          message: "El producto ya existe con el mismo 'product_id'.",
-          success: false
-        });
-      }
-  
-      // Agregar timestamps al producto
-      const now = new Date().toISOString();
-      productData.created_at = now;
-      productData.updated_at = now;
-  
-      // Insertar el nuevo producto en la colección
-      const insertResult = await productsCollection.insertOne(productData);
-  
-      if (insertResult.acknowledged) {
-        // Notificar al webhook sobre el éxito
-        await axios.post(webhookUrl, {
-          message: "Producto creado con éxito.",
-          success: true,
-          product_id: productData.product_id
-        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
-  
-        return res.status(200).json({
-          message: "Producto creado con éxito.",
-          success: true,
-          product_id: productData.product_id
+        return res.status(201).json({ 
+          message: "Nuevo producto creado con éxito.", 
+          success: true, 
+          product: newProduct 
         });
       } else {
-        // Error al guardar el producto
-        await axios.post(webhookUrl, {
-          message: "Error al crear el producto.",
-          success: false,
+        // Notificar a Tiffany sobre el error al insertar el producto
+        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        await axios.post(tiffanyWebhook, { 
+          message: "Error al crear el nuevo producto", 
+          success: false 
         }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-        return res.status(202).json({
-          message: "Error al crear el producto.",
-          success: false
+        return res.status(500).json({ 
+          message: "Error al crear el nuevo producto.", 
+          success: false 
         });
       }
     } catch (error) {
       console.error('Error al crear el producto:', error);
   
-      // Notificar al webhook sobre el error interno
-      await axios.post(webhookUrl, {
-        message: "Error interno del servidor al intentar crear el producto.",
-        success: false,
-        error: error.message
+      // Notificar a Tiffany sobre el error interno
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, { 
+        message: "Error interno al procesar la solicitud de creación de producto.", 
+        error: error.message, 
+        success: false 
       }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-      return res.status(202).json({
-        message: "Error interno del servidor al intentar crear el producto.",
-        success: false
+      return res.status(500).json({ 
+        message: "Error interno al procesar la solicitud de creación de producto.", 
+        success: false 
       });
     }
   };
+  
+  module.exports = { newProductapi };
   
   
   
