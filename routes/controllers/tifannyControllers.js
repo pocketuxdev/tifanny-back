@@ -2,9 +2,11 @@ const pool = require('../../database/mongo')
 const axios = require('axios');
 const moment = require('moment-timezone');
 const { v4: uuidv4 } = require('uuid');
+// Elimina esta línea si ya está importada en otro archivo
 const CryptoJS = require('crypto-js');
 
-const CryptoJS = require('crypto-js');  // Importar CryptoJS
+
+
 
 const newClientapi = async (req, res) => { 
     const datos = req.body;
