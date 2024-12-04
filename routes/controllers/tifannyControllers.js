@@ -290,7 +290,7 @@ const newClientapi = async (req, res) => {
       // Si se está actualizando la contraseña, la encriptamos
       if (newData.password) {
         const CryptoJS = require('crypto-js');  // Asegúrate de que esté importado
-
+  
         // Encriptar la nueva contraseña
         const hashedPassword = CryptoJS.SHA256(newData.password, process.env.CODE_SECRET_DATA).toString();
         newData.password = hashedPassword;  // Reemplazar la contraseña con la encriptada
@@ -351,10 +351,10 @@ const newClientapi = async (req, res) => {
       const result = await clientsCollection.updateOne({ id }, { $set: updatedClientData });
   
       if (result.modifiedCount > 0) {
-        // En la respuesta, ocultamos la contraseña
+        // En la respuesta, ocultamos la contraseña, excepto cuando se ha actualizado
         const responseData = {
           ...updatedClientData,
-          password: '********'
+          password: newData.password ? newData.password : '********' // Si la contraseña fue actualizada, la mostramos; de lo contrario, la ocultamos.
         };
   
         // Enviar mensaje al webhook para notificar el éxito
@@ -405,8 +405,8 @@ const newClientapi = async (req, res) => {
         success: false 
       });
     }
-};
-
+  };
+  
   
   const deleteClientapi = async (req, res) => {
     const { id } = req.params;
