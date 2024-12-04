@@ -2,7 +2,6 @@ const pool = require('../../database/mongo')
 const axios = require('axios');
 const moment = require('moment-timezone');
 const { v4: uuidv4 } = require('uuid');
-// Elimina esta línea si ya está importada en otro archivo
 const CryptoJS = require('crypto-js');
 
 
@@ -263,7 +262,7 @@ const newClientapi = async (req, res) => {
     }
   };
 
-  const updateClientapi = async (req, res) => {
+  const updateClientapi = async (req, res) => { 
     const { id } = req.params; // Cédula o ID del cliente
     const newData = req.body; // Datos nuevos que se desean actualizar
   
@@ -288,17 +287,13 @@ const newClientapi = async (req, res) => {
         return res.status(201).json({ message: "Cliente no encontrado.", success: false });
       }
   
-      // Si se está actualizando la contraseña, podemos generar una nueva
-      if (newData.password === 'generate_new') {
-        const generatePassword = () => {
-          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-          let password = '';
-          for (let i = 0; i < 12; i++) {
-            password += chars.charAt(Math.floor(Math.random() * chars.length));
-          }
-          return password;
-        };
-        newData.password = generatePassword();
+      // Si se está actualizando la contraseña, la encriptamos
+      if (newData.password) {
+        const CryptoJS = require('crypto-js');  // Asegúrate de que esté importado
+
+        // Encriptar la nueva contraseña
+        const hashedPassword = CryptoJS.SHA256(newData.password, process.env.CODE_SECRET_DATA).toString();
+        newData.password = hashedPassword;  // Reemplazar la contraseña con la encriptada
       }
   
       // Log de los cambios realizados
@@ -410,7 +405,8 @@ const newClientapi = async (req, res) => {
         success: false 
       });
     }
-  };
+};
+
   
   const deleteClientapi = async (req, res) => {
     const { id } = req.params;
