@@ -515,18 +515,18 @@ const newClientapi = async (req, res) => {
   /*---------------------------------productos--------------------------------------------------------------*/
   
  
-  
-  const newProductapi = async (req, res) => { 
+  const newProductapi = async (req, res) => {
     const { name, description, category, price, availability, tags } = req.body;
   
     // Validación de los datos
     if (!name || !description || !category || !price || !availability || !tags) {
       const message = 'Faltan datos obligatorios en la solicitud.';
-      // Notificar a Tiffany sobre el error
       const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
-      await axios.post(tiffanyWebhook, { 
-        message: message, 
-        success: false 
+  
+      // Notificar a Tiffany sobre el error
+      await axios.post(tiffanyWebhook, {
+        message,
+        success: false
       }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
       return res.status(201).json({ message, success: false });
@@ -534,7 +534,7 @@ const newClientapi = async (req, res) => {
   
     try {
       const productsCollection = pool.db('pocketux').collection('products');
-      
+  
       // Generar el ID único para el producto
       const newProduct = {
         product_id: uuidv4(),
@@ -555,49 +555,110 @@ const newClientapi = async (req, res) => {
       const result = await productsCollection.insertOne(newProduct);
   
       if (result.acknowledged) {
-        // Notificar a Tiffany sobre el éxito
         const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
-        await axios.post(tiffanyWebhook, { 
-          message: "Nuevo producto creado con éxito", 
-          productData: newProduct, 
-          success: true 
+  
+        // Notificar a Tiffany sobre el éxito
+        await axios.post(tiffanyWebhook, {
+          message: "Nuevo producto creado con éxito.",
+          productData: newProduct,
+          success: true
         }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-        return res.status(200).json({ 
-          message: "Nuevo producto creado con éxito.", 
-          success: true, 
-          product: newProduct 
+        return res.status(200).json({
+          message: "Nuevo producto creado con éxito.",
+          success: true,
+          product: newProduct
         });
       } else {
-        // Notificar a Tiffany sobre el error al insertar el producto
         const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
-        await axios.post(tiffanyWebhook, { 
-          message: "Error al crear el nuevo producto", 
-          success: false 
+  
+        // Notificar a Tiffany sobre el error al insertar el producto
+        await axios.post(tiffanyWebhook, {
+          message: "Error al crear el nuevo producto.",
+          success: false
         }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-        return res.status(202).json({ 
-          message: "Error al crear el nuevo producto.", 
-          success: false 
+        return res.status(202).json({
+          message: "Error al crear el nuevo producto.",
+          success: false
         });
       }
     } catch (error) {
       console.error('Error al crear el producto:', error);
   
-      // Notificar a Tiffany sobre el error interno
       const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
-      await axios.post(tiffanyWebhook, { 
-        message: "Error interno al procesar la solicitud de creación de producto.", 
-        error: error.message, 
-        success: false 
+  
+      // Notificar a Tiffany sobre el error interno
+      await axios.post(tiffanyWebhook, {
+        message: "Error interno al procesar la solicitud de creación de producto.",
+        error: error.message,
+        success: false
       }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
   
-      return res.status(500).json({ 
-        message: "Error interno al procesar la solicitud de creación de producto.", 
-        success: false 
+      return res.status(500).json({
+        message: "Error interno al procesar la solicitud de creación de producto.",
+        success: false
       });
     }
   };
+
+
+  const getAllProductsapi = async (req, res) => {
+    try {
+      const productsCollection = pool.db('pocketux').collection('products');
+  
+      // Obtener todos los productos de la colección
+      const products = await productsCollection.find().toArray();
+  
+      if (products.length === 0) {
+        const message = "No se encontraron productos en la colección.";
+  
+        // Notificar a Tiffany sobre el resultado vacío
+        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        await axios.post(tiffanyWebhook, {
+          message,
+          success: false
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+        return res.status(201).json({
+          message,
+          success: false,
+          products: []
+        });
+      }
+  
+      // Notificar a Tiffany sobre el éxito
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, {
+        message: "Productos recuperados con éxito.",
+        success: true,
+        products
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+      return res.status(200).json({
+        message: "Productos recuperados con éxito.",
+        success: true,
+        products
+      });
+    } catch (error) {
+      console.error('Error al recuperar los productos:', error);
+  
+      // Notificar a Tiffany sobre el error interno
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, {
+        message: "Error interno al intentar recuperar los productos.",
+        error: error.message,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+  
+      return res.status(500).json({
+        message: "Error interno al intentar recuperar los productos.",
+        success: false
+      });
+    }
+  };
+  
+  
   
  /*---------------------------------Relacion productos and clientes(cotizacion)--------------------------------------------------------------*/
   
@@ -732,6 +793,57 @@ const newClientapi = async (req, res) => {
   }
 };
 
+/*---------------------------------pagina web --------------------------------------------------------------*/
+
+const loginClientapi = async (req, res) => {
+  const { email, password } = req.body; // Datos enviados desde el cliente
+
+  try {
+    // Conexión a la base de datos y acceso a la colección 'clients'
+    const collection = pool.db('pocketux').collection('clients');
+    
+    // Buscar al usuario por el campo 'email'
+    const user = await collection.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ 
+        status: "Error", 
+        message: "Credenciales inválidas, usuario no encontrado" 
+      });
+    }
+
+    // Comparar la contraseña cifrada
+    const hashedPassword = CryptoJS.SHA256(password, process.env.CODE_SECRET_DATA).toString();
+    if (hashedPassword !== user.password) {
+      return res.status(400).json({ 
+        status: "Error", 
+        message: "Credenciales inválidas, contraseña incorrecta" 
+      });
+    }
+
+    // Obtener el nombre del usuario y otros datos relevantes
+    const nombreUsuario = user.fullName || "Usuario";
+
+    // Responder con éxito al frontend
+    return res.status(200).json({
+      status: "Success",
+      message: `Inicio de sesión exitoso, bienvenido ${nombreUsuario}`,
+      clientData: {
+        fullName: user.fullName,
+        email: user.email,
+        roles: user.roles,
+        preferences: user.preferences,
+        company: user.company,
+      }
+    });
+  } catch (error) {
+    console.error('Error al iniciar sesión:', error.message);
+    return res.status(500).json({ 
+      status: "Error", 
+      message: "Error interno del servidor", 
+      error: error.message 
+    });
+  }
+};
   
   
   module.exports = {
@@ -741,5 +853,7 @@ const newClientapi = async (req, res) => {
     updateClientapi,
     deleteClientapi,
     newProductapi,
-    createQuotationapi
+    createQuotationapi,
+    loginClientapi,
+    getAllProductsapi
   };
