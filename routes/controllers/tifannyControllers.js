@@ -658,6 +658,333 @@ const newClientapi = async (req, res) => {
     }
   };
   
+  const getSpecificProductapi = async (req, res) => {
+    const query = req.query; // Obtiene los parámetros desde la URL
+
+    // Validar si no se han proporcionado parámetros
+    if (Object.keys(query).length === 0) {
+        const message = "Debe proporcionar al menos un campo para buscar el producto.";
+
+        // Notificar a Tiffany sobre el error
+        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        await axios.post(tiffanyWebhook, {
+            message,
+            success: false
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+        // Retornar 201 para notificar sobre falta de parámetros
+        return res.status(201).json({
+            message,
+            success: false,
+            product: null
+        });
+    }
+
+    try {
+        const productsCollection = pool.db('pocketux').collection('products');
+
+        // Buscar producto específico basado en los campos proporcionados en la query
+        const product = await productsCollection.findOne(query);
+
+        if (!product) {
+            const message = "No se encontró ningún producto que coincida con los criterios proporcionados.";
+
+            // Notificar a Tiffany sobre el resultado vacío
+            const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+            await axios.post(tiffanyWebhook, {
+                message,
+                success: false
+            }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+            // Retornar 201 para notificar resultado vacío
+            return res.status(201).json({
+                message,
+                success: false,
+                product: null
+            });
+        }
+
+        // Notificar a Tiffany sobre el éxito
+        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        await axios.post(tiffanyWebhook, {
+            message: "Producto recuperado con éxito.",
+            success: true,
+            product
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+        // Retornar 200 indicando éxito
+        return res.status(200).json({
+            message: "Producto recuperado con éxito.",
+            success: true,
+            product
+        });
+    } catch (error) {
+        console.error('Error al recuperar el producto:', error);
+
+        const message = "Hubo un problema al procesar su solicitud, pero se registró el incidente.";
+
+        // Notificar a Tiffany sobre el problema interno
+        const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+        await axios.post(tiffanyWebhook, {
+            message,
+            success: false
+        }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+        // Retornar 202 indicando que hubo un problema, pero el flujo no se interrumpe
+        return res.status(202).json({
+            message,
+            success: false,
+            product: null
+        });
+    }
+};
+
+const updateProductapi = async (req, res) => {
+  const { product_id } = req.query; // ID del producto como query parameter
+  const updates = req.body; // Campos a actualizar desde el body
+  const updatedBy = "admin"; // Usuario que realiza la actualización (por ahora está fijo como "admin")
+
+  if (!product_id) {
+    const message = "Debe proporcionar el 'product_id' como parámetro para actualizar el producto.";
+
+    // Notificar a Tiffany
+    const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    await axios.post(tiffanyWebhook, { message, success: false })
+      .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(201).json({
+      message,
+      success: false
+    });
+  }
+
+  if (Object.keys(updates).length === 0) {
+    const message = "Debe proporcionar al menos un campo en el body para actualizar.";
+
+    // Notificar a Tiffany
+    const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    await axios.post(tiffanyWebhook, { message, success: false })
+      .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(201).json({
+      message,
+      success: false
+    });
+  }
+
+  try {
+    const productsCollection = pool.db('pocketux').collection('products');
+    const logsCollection = pool.db('pocketux').collection('logProduct'); // Colección para los logs de actualización
+
+    // Buscar el producto actual
+    const product = await productsCollection.findOne({ product_id });
+
+    if (!product) {
+      const message = "No se encontró ningún producto con el 'product_id' proporcionado.";
+
+      // Notificar a Tiffany
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, { message, success: false })
+        .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(201).json({
+        message,
+        success: false
+      });
+    }
+
+    // Comprobar si los valores enviados son iguales a los actuales
+    let isUpdated = false;
+    for (let key in updates) {
+      if (updates[key] !== product[key]) {
+        isUpdated = true;
+        break;
+      }
+    }
+
+    if (!isUpdated) {
+      const message = "Los campos enviados son iguales a los actuales. No se realizaron cambios.";
+
+      // Notificar a Tiffany
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, { message, success: true, product })
+        .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(200).json({
+        message,
+        success: true,
+        product
+      });
+    }
+
+    // Intentar actualizar el producto
+    const result = await productsCollection.updateOne(
+      { product_id },
+      { $set: updates }
+    );
+
+    if (result.matchedCount === 0) {
+      const message = "No se encontró ningún producto con el 'product_id' proporcionado.";
+
+      // Notificar a Tiffany
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, { message, success: false })
+        .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(201).json({
+        message,
+        success: false
+      });
+    }
+
+    // Registrar cambios en el log
+    const logEntry = {
+      product_id,
+      updates,
+      updatedBy, // Aquí está "admin"
+      updatedAt: new Date().toISOString(),
+    };
+    await logsCollection.insertOne(logEntry);
+
+    // Notificar a Tiffany sobre el éxito
+    const message = "Producto actualizado con éxito.";
+    const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    await axios.post(tiffanyWebhook, { message, success: true, product_id, updates })
+      .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(200).json({
+      message,
+      success: true,
+      log: logEntry,
+      product: { ...product, ...updates }
+    });
+  } catch (error) {
+    console.error('Error al actualizar el producto:', error);
+
+    // Notificar a Tiffany sobre el error interno
+    const message = "Error interno al intentar actualizar el producto.";
+    const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    await axios.post(tiffanyWebhook, { message, error: error.message, success: false })
+      .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(202).json({
+      message,
+      success: false
+    });
+  }
+};
+
+const deleteProductApi = async (req, res) => {
+  const { product_id } = req.query; // El ID del producto como query parameter
+
+  if (!product_id) {
+    const message = "Debe proporcionar el 'product_id' como parámetro para eliminar el producto.";
+
+    // Notificar a Tiffany
+    const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    await axios.post(tiffanyWebhook, { message, success: false })
+      .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(201).json({
+      message,
+      success: false
+    });
+  }
+
+  try {
+    const productsCollection = pool.db('pocketux').collection('products');
+    const productHistoryCollection = pool.db('pocketux').collection('productshistory'); // Nueva colección de historial de productos
+
+    // Buscar el producto
+    const product = await productsCollection.findOne({ product_id });
+
+    if (!product) {
+      const message = "No se encontró ningún producto con el 'product_id' proporcionado.";
+
+      // Notificar a Tiffany
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, { message, success: false })
+        .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(201).json({
+        message,
+        success: false
+      });
+    }
+
+    // Crear el objeto para el historial con solo los campos relevantes
+    const productHistory = {
+      product_id: product.product_id,
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      price: product.price,
+      availability: product.availability,
+      tags: product.tags,
+      deletedAt: new Date().toISOString(), // Fecha y hora de eliminación
+      deletedBy: "admin", // Usuario que realiza la eliminación
+    };
+
+    // Mover el producto a la colección de historial antes de eliminarlo
+    const result = await productHistoryCollection.insertOne(productHistory);
+    if (result.insertedCount === 0) {
+      const message = "Error al intentar guardar el producto en el historial.";
+
+      // Notificar a Tiffany
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, { message, success: false })
+        .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(500).json({
+        message,
+        success: false
+      });
+    }
+
+    // Eliminar el producto de la colección 'products'
+    const deleteResult = await productsCollection.deleteOne({ product_id });
+
+    if (deleteResult.deletedCount === 0) {
+      const message = "No se encontró ningún producto con el 'product_id' proporcionado para eliminar.";
+
+      // Notificar a Tiffany
+      const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+      await axios.post(tiffanyWebhook, { message, success: false })
+        .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(201).json({
+        message,
+        success: false
+      });
+    }
+
+    // Notificar a Tiffany sobre el éxito de la eliminación
+    const message = "Producto eliminado y movido al historial con éxito.";
+    const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    await axios.post(tiffanyWebhook, { message, success: true, product_id })
+      .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(200).json({
+      message,
+      success: true,
+      product: productHistory // Retorna toda la información relevante del producto eliminado
+    });
+  } catch (error) {
+    console.error('Error al eliminar el producto:', error);
+
+    // Notificar a Tiffany sobre el error interno
+    const message = "Error interno al intentar eliminar el producto.";
+    const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+    await axios.post(tiffanyWebhook, { message, error: error.message, success: false })
+      .catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(202).json({
+      message,
+      success: false
+    });
+  }
+};
+
   
   
  /*---------------------------------Relacion productos and clientes(cotizacion)--------------------------------------------------------------*/
@@ -855,5 +1182,8 @@ const loginClientapi = async (req, res) => {
     newProductapi,
     createQuotationapi,
     loginClientapi,
-    getAllProductsapi
+    getAllProductsapi,
+    getSpecificProductapi, 
+    updateProductapi,
+    deleteProductApi
   };
