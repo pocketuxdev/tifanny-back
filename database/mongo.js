@@ -3,53 +3,25 @@ require('dotenv').config();
 
 const uri = process.env.MONGO_URI;
 
-let client;
-let clientPromise;
-
-if (process.env.NODE_ENV === 'development') {
-  // En desarrollo usamos la misma conexión para todas las invocaciones
-  if (global._mongoClientPromise) {
-    clientPromise = global._mongoClientPromise;
-  } else {
-    client = new MongoClient(uri, {
-      serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-      },
-      connectTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-      minPoolSize: 1,
-      waitQueueTimeoutMS: 5000,
-    });
-
-    global._mongoClientPromise = client.connect();
-    clientPromise = global._mongoClientPromise;
-  }
-} else {
-  // En producción (por ejemplo, en Vercel), no usar el caché
-  client = new MongoClient(uri, {
-    serverApi: {
-      version: ServerApiVersion.v1,
-      strict: true,
-      deprecationErrors: true,
-    },
-    connectTimeoutMS: 10000,
-    socketTimeoutMS: 45000,
-    maxPoolSize: 10,
-    minPoolSize: 1,
-    waitQueueTimeoutMS: 5000,
-  });
-
-  clientPromise = client.connect();
-}
+// Configuración del cliente MongoDB sin `useUnifiedTopology`
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+  connectTimeoutMS: 10000, // Tiempo máximo para conectar (10 segundos)
+  socketTimeoutMS: 45000, // Tiempo de espera para sockets (45 segundos)
+  maxPoolSize: 10, // Número máximo de conexiones simultáneas
+  minPoolSize: 1, // Número mínimo de conexiones en el pool
+  waitQueueTimeoutMS: 5000, // Tiempo máximo para esperar por una conexión en el pool
+});
 
 const validatedb = async () => {
   try {
-    await clientPromise; // Conexión usando la promesa almacenada
+    await client.connect(); // Conexión al cliente
     console.log('Conexión exitosa a MongoDB');
-
+    // Validar conexión a la base de datos
     const admin = client.db().admin();
     const { ok } = await admin.ping();
     if (ok === 1) {
