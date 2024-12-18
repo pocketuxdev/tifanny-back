@@ -1188,7 +1188,6 @@ const confirmPurchaseapi = async (req, res) => {
 
     // Crear un registro en la colección `purchases`
     const purchase = {
-      purchase_id: new ObjectId(), // ID único generado automáticamente
       clientId: quotation.clientId,
       clientFullName: quotation.clientFullName,
       clientEmail: quotation.clientEmail,
