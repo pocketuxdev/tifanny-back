@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { newClientapi,getAllClientsapi,getClientByCriteriaapi,updateClientapi, deleteClientapi,newProductapi, createQuotationapi,loginClientapi, getAllProductsapi, getSpecificProductapi, updateProductapi, deleteProductApi, confirmPurchaseapi } =require('./controllers/tifannyControllers');
+const { newClientapi,getAllClientsapi,getClientByCriteriaapi,updateClientapi, deleteClientapi,newProductapi, createQuotationapi,loginClientapi, getAllProductsapi, getSpecificProductapi, updateProductapi, deleteProductApi, confirmPurchaseapi, verifyPhoneNumberapi } =require('./controllers/tifannyControllers');
 
 
 router.post('/newClient', newClientapi);
@@ -16,5 +16,6 @@ router.get('/getAllProducts', getAllProductsapi);
 router.get('/getSpecificProduct', getSpecificProductapi);
 router.put('/updateProduct', updateProductapi); 
 router.delete('/deleteProduct', deleteProductApi);
+router.post('/verifyPhoneNumber', verifyPhoneNumberapi );
 
 module.exports = router;

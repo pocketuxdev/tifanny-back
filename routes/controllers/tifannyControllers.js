@@ -1323,6 +1323,93 @@ const loginClientapi = async (req, res) => {
   }
 };
   
+
+
+const verifyPhoneNumberapi = async (req, res) => {
+  const { phoneNumber } = req.body; // Número de teléfono enviado en el body de la solicitud
+  const tiffanyWebhook = 'https://hook.us1.make.com/r00ckvp8vqste3n1oyy1s6srb8ho8x3o';
+
+  try {
+    // Conexión a la base de datos y acceso a la colección 'clients'
+    const db = client.db('pocketux');
+    const collection = db.collection('clients');
+
+    // Buscar el cliente por el número de teléfono
+    const clientFound = await collection.findOne({ phone: phoneNumber });
+
+    if (!clientFound) {
+      // Si no se encuentra el número, notificar a Tiffany que no está registrado
+      const message = "El número de teléfono no está registrado en nuestra base de datos.";
+      await axios.post(tiffanyWebhook, {
+        message,
+        phoneNumber,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(201).json({
+        status: "Error",
+        message: "El número no está registrado en la base de datos."
+      });
+    }
+
+    // Si el número está registrado, enviar la información al webhook de Tiffany
+    const message = "Número de teléfono verificado con éxito.";
+    const response = await axios.post(tiffanyWebhook, {
+      message,
+      phoneNumber: clientFound.phone,
+      clientId: clientFound._id,
+      success: true
+    }).catch((webhookError) => {
+      console.error('Error al enviar el webhook:', webhookError.message);
+      throw new Error('Error al comunicar con Tiffany');
+    });
+
+    // Verificar la respuesta del webhook (esperamos un código de respuesta 200)
+    if (response.status === 200) {
+      // Actualizar el campo 'password' en la colección 'clients'
+      const newPassword = response.data.newPassword; // Supongamos que la respuesta de Tiffany contiene el nuevo password
+      const updatePassword = await collection.updateOne(
+        { phone: phoneNumber },
+        { $set: { password: newPassword } }
+      );
+
+      if (updatePassword.modifiedCount === 0) {
+        return res.status(202).json({
+          status: "Error",
+          message: "Error al actualizar la contraseña del cliente."
+        });
+      }
+
+      // Responder al cliente confirmando que la contraseña fue actualizada
+      return res.status(200).json({
+        status: "Success",
+        message: "Número de teléfono verificado y contraseña actualizada con éxito."
+      });
+    } else {
+      return res.status(202).json({
+        status: "Error",
+        message: "Error al recibir la respuesta adecuada de Tiffany."
+      });
+    }
+
+  } catch (error) {
+    console.error('Error al verificar el número de teléfono:', error.message);
+
+    // Notificar al webhook que ocurrió un error en el proceso
+    const message = "Error interno al procesar la verificación del número de teléfono.";
+    await axios.post(tiffanyWebhook, {
+      message,
+      error: error.message,
+      success: false
+    }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(500).json({
+      status: "Error",
+      message: "Error interno al procesar la solicitud.",
+      error: error.message
+    });
+  }
+};
   
   module.exports = {
     newClientapi,
@@ -1337,5 +1424,6 @@ const loginClientapi = async (req, res) => {
     getSpecificProductapi, 
     updateProductapi,
     deleteProductApi,
-    confirmPurchaseapi
+    confirmPurchaseapi,
+    verifyPhoneNumberapi
   };
