@@ -989,9 +989,8 @@ const deleteProductApi = async (req, res) => {
   
  /*---------------------------------Relacion productos and clientes(cotizacion)--------------------------------------------------------------*/
   
- 
  const createQuotationapi = async (req, res) => {
-  const { clientId, productId } = req.body; // Datos que nos llegan desde el body
+  const { clientId, productId, duration } = req.body; // `duration` se especifica como días (7, 15, 30, etc.)
   const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
 
   try {
@@ -1000,9 +999,8 @@ const deleteProductApi = async (req, res) => {
     const productsCollection = pool.db('pocketux').collection('products');
     const quotationsCollection = pool.db('pocketux').collection('quotations');
 
-    // Obtener el cliente por su ID (cedula)
+    // Obtener el cliente por su ID
     const client = await clientsCollection.findOne({ id: clientId });
-
     if (!client) {
       await axios.post(tiffanyWebhook, {
         message: "Cliente no encontrado para la cotización.",
@@ -1015,7 +1013,6 @@ const deleteProductApi = async (req, res) => {
 
     // Obtener el producto por su ID
     const product = await productsCollection.findOne({ product_id: productId });
-
     if (!product) {
       await axios.post(tiffanyWebhook, {
         message: "Producto no encontrado para la cotización.",
@@ -1047,6 +1044,10 @@ const deleteProductApi = async (req, res) => {
       });
     }
 
+    // Calcular la fecha de expiración de la cotización
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + duration); // Sumar la duración (en días) al tiempo actual
+
     // Crear el objeto de cotización
     const quotation = {
       clientId: client.id, // Cedula del cliente
@@ -1060,11 +1061,11 @@ const deleteProductApi = async (req, res) => {
       status: "quoting", // Estado de la cotización
       createdAt: new Date().toISOString(), // Fecha de creación
       updatedAt: new Date().toISOString(), // Fecha de actualización
+      expirationDate: expirationDate.toISOString() // Fecha de expiración
     };
 
     // Insertar la cotización en la colección 'quotations'
     const result = await quotationsCollection.insertOne(quotation);
-
     if (!result.acknowledged) {
       await axios.post(tiffanyWebhook, {
         message: "Error al crear la cotización.",
@@ -1076,34 +1077,52 @@ const deleteProductApi = async (req, res) => {
       return res.status(202).json({ message: "Error al crear la cotización.", success: false });
     }
 
-    // Actualizar el estado del producto a "quoting" en la colección 'products'
-    const updateProduct = await productsCollection.updateOne(
+    // Actualizar el estado del producto a "quoting"
+    await productsCollection.updateOne(
       { product_id: productId },
       { $set: { status: "quoting", clientId: client.id } }
     );
 
-    if (updateProduct.modifiedCount === 1) {
-      await axios.post(tiffanyWebhook, {
-        message: "Cotización creada y estado del producto actualizado.",
-        clientId,
-        productId,
-        success: true
-      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+    // Configurar un temporizador para manejar la expiración
+    setTimeout(async () => {
+      try {
+        // Verificar si la cotización aún existe (podría haberse eliminado o completado antes)
+        const existingQuotation = await quotationsCollection.findOne({ _id: result.insertedId });
 
-      return res.status(200).json({
-        message: "Cotización creada y estado del producto actualizado con éxito.",
-        success: true,
-        quotation: quotation
-      });
-    } else {
-      await axios.post(tiffanyWebhook, {
-        message: "Error al actualizar el estado del producto.",
-        productId,
-        success: false
-      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+        if (existingQuotation) {
+          // Eliminar la cotización
+          await quotationsCollection.deleteOne({ _id: result.insertedId });
 
-      return res.status(202).json({ message: "Error al actualizar el estado del producto.", success: false });
-    }
+          // Restaurar el estado del producto a "activo"
+          await productsCollection.updateOne(
+            { product_id: productId },
+            { $set: { status: "activo" }, $unset: { clientId: "" } }
+          );
+
+          console.log(`Cotización con ID ${result.insertedId} eliminada por expiración.`);
+          await axios.post(tiffanyWebhook, {
+            message: `La cotización con ID ${result.insertedId} ha expirado y el producto ha sido restaurado a "activo".`,
+            success: true
+          }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+        }
+      } catch (error) {
+        console.error('Error al manejar la expiración de la cotización:', error.message);
+      }
+    }, duration * 24 * 60 * 60 * 1000); // Convertir días a milisegundos
+
+    // Responder al cliente con éxito
+    await axios.post(tiffanyWebhook, {
+      message: "Cotización creada y estado del producto actualizado.",
+      clientId,
+      productId,
+      success: true
+    }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(200).json({
+      message: "Cotización creada y estado del producto actualizado con éxito.",
+      success: true,
+      quotation
+    });
   } catch (error) {
     console.error('Error al crear cotización:', error);
 
@@ -1119,6 +1138,139 @@ const deleteProductApi = async (req, res) => {
     });
   }
 };
+
+const confirmPurchaseapi = async (req, res) => {
+  const { clientId, productId } = req.body; // Datos enviados en el body
+  const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
+
+  try {
+    // Conexión a las colecciones
+    const quotationsCollection = pool.db('pocketux').collection('quotations');
+    const productsCollection = pool.db('pocketux').collection('products');
+    const purchasesCollection = pool.db('pocketux').collection('purchases');
+
+    // Buscar la cotización correspondiente
+    const quotation = await quotationsCollection.findOne({ clientId, productId });
+
+    if (!quotation) {
+      // Notificar si la cotización no existe
+      const message = "No se encontró una cotización para el cliente y producto proporcionados.";
+      await axios.post(tiffanyWebhook, {
+        message,
+        clientId,
+        productId,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(201).json({
+        message,
+        success: false
+      });
+    }
+
+    // Eliminar la cotización
+    const deleteQuotation = await quotationsCollection.deleteOne({ clientId, productId });
+
+    if (deleteQuotation.deletedCount === 0) {
+      const message = "Error al intentar eliminar la cotización.";
+      await axios.post(tiffanyWebhook, {
+        message,
+        clientId,
+        productId,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(202).json({
+        message,
+        success: false
+      });
+    }
+
+    // Crear un registro en la colección `purchases`
+    const purchase = {
+      purchase_id: new ObjectId(), // ID único generado automáticamente
+      clientId: quotation.clientId,
+      clientFullName: quotation.clientFullName,
+      clientEmail: quotation.clientEmail,
+      clientPhone: quotation.clientPhone,
+      productId: quotation.productId,
+      productName: quotation.productName,
+      productDescription: quotation.productDescription,
+      productPrice: quotation.productPrice,
+      status: "completed", // Estado de la compra
+      purchaseDate: new Date().toISOString(), // Fecha de la compra
+      updatedAt: new Date().toISOString() // Fecha de actualización
+    };
+
+    const createPurchase = await purchasesCollection.insertOne(purchase);
+
+    if (!createPurchase.acknowledged) {
+      const message = "Error al registrar la compra.";
+      await axios.post(tiffanyWebhook, {
+        message,
+        clientId,
+        productId,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(202).json({
+        message,
+        success: false
+      });
+    }
+
+    // Actualizar el estado del producto a "used" y asociarlo con el cliente
+    const updateProduct = await productsCollection.updateOne(
+      { product_id: productId },
+      { $set: { status: "used", usedBy: clientId, updatedAt: new Date().toISOString() } }
+    );
+
+    if (updateProduct.modifiedCount === 0) {
+      const message = "Error al actualizar el estado del producto tras la compra.";
+      await axios.post(tiffanyWebhook, {
+        message,
+        clientId,
+        productId,
+        success: false
+      }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+      return res.status(202).json({
+        message,
+        success: false
+      });
+    }
+
+    // Notificar éxito de la compra
+    const message = "Compra confirmada con éxito. Cotización eliminada, compra registrada y producto actualizado.";
+    await axios.post(tiffanyWebhook, {
+      message,
+      clientId,
+      productId,
+      success: true
+    }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(200).json({
+      message,
+      success: true,
+      purchase
+    });
+  } catch (error) {
+    console.error('Error al confirmar la compra:', error);
+
+    const message = "Error interno al procesar la compra.";
+    await axios.post(tiffanyWebhook, {
+      message,
+      error: error.message,
+      success: false
+    }).catch((webhookError) => console.error('Error al enviar el webhook:', webhookError.message));
+
+    return res.status(500).json({
+      message,
+      success: false
+    });
+  }
+};
+
 
 /*---------------------------------pagina web --------------------------------------------------------------*/
 
@@ -1185,5 +1337,6 @@ const loginClientapi = async (req, res) => {
     getAllProductsapi,
     getSpecificProductapi, 
     updateProductapi,
-    deleteProductApi
+    deleteProductApi,
+    confirmPurchaseapi
   };
