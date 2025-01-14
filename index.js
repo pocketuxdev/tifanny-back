@@ -9,10 +9,16 @@ const app = express();
 
 // Configuración específica de CORS
 const corsOptions = {
-    origin: ['http://localhost:5001', 'http://0.0.0.0:5001','www.tiffany.cool'], // Permitir ambas URLs
+    origin: [
+        'http://localhost:5001', 
+        'http://0.0.0.0:5001',
+        'www.tiffany.cool',
+        'https://prueba-orcin-phi.vercel.app',
+        'https://www.prueba-orcin-phi.vercel.app'
+    ], 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
-    credentials: true, // Permite credenciales
+    credentials: true,
     optionsSuccessStatus: 200
 };
 
