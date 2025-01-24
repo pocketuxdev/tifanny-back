@@ -1280,41 +1280,42 @@ const loginClientapi = async (req, res) => {
     // Conexión a la base de datos y acceso a la colección 'clients'
     const collection = pool.db('pocketux').collection('clients');
     
-    // Buscar al usuario por el campo 'email'
-    const user = await collection.findOne({ email });
+    // Buscar al usuario por el campo 'email' (case-insensitive)
+    const user = await collection.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
     if (!user) {
-      return res.status(400).json({ 
+      return res.status(404).json({ 
         status: "Error", 
-        message: "Credenciales inválidas, usuario no encontrado" 
+        message: "Usuario no encontrado. Verifica tus credenciales." 
       });
     }
 
     // Comparar la contraseña cifrada
     const hashedPassword = CryptoJS.SHA256(password, process.env.CODE_SECRET_DATA).toString();
     if (hashedPassword !== user.password) {
-      return res.status(400).json({ 
+      return res.status(401).json({ 
         status: "Error", 
-        message: "Credenciales inválidas, contraseña incorrecta" 
+        message: "Contraseña incorrecta. Verifica tus credenciales." 
       });
     }
 
-    // Obtener el nombre del usuario y otros datos relevantes
-    const nombreUsuario = user.fullName || "Usuario";
+    // Formatear los datos para que coincidan con el frontend
+    const formattedData = {
+      email: user.email || "No especificado",
+      fullName: user.fullName || "No especificado",
+      company: user.company?.name || "No especificado",
+      department: user.company?.department || "No especificado",
+      position: user.company?.position || "No especificado",
+      roles: user.roles?.join(", ") || "No especificado",
+    };
 
-    // Responder con éxito al frontend
+    // Responder con los datos al frontend
     return res.status(200).json({
       status: "Success",
-      message: `Inicio de sesión exitoso, bienvenido ${nombreUsuario}`,
-      clientData: {
-        fullName: user.fullName,
-        email: user.email,
-        roles: user.roles,
-        preferences: user.preferences,
-        company: user.company,
-      }
+      message: `Inicio de sesión exitoso. Bienvenido, ${formattedData.fullName}.`,
+      clientData: formattedData,
     });
   } catch (error) {
-    console.error('Error al iniciar sesión:', error.message);
+    console.error("Error al iniciar sesión:", error.message);
     return res.status(500).json({ 
       status: "Error", 
       message: "Error interno del servidor", 
@@ -1322,6 +1323,7 @@ const loginClientapi = async (req, res) => {
     });
   }
 };
+
   
 
 
