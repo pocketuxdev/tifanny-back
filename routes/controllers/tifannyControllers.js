@@ -1419,26 +1419,26 @@ const newUserHomeApi = async (req, res) => {
 
   // Validar número de teléfono real
   const isValidPhone = (phone) => {
-    const phoneNumber = parsePhoneNumberFromString(phone, 'MX'); // México por defecto
+    const phoneNumber = parsePhoneNumberFromString(phone, "MX"); // México por defecto
     return phoneNumber && phoneNumber.isValid();
   };
 
   try {
     await pool.connect();
-    const collection = pool.db('pocketux').collection('usershome');
+    const collection = pool.db("pocketux").collection("usershome");
 
-    if (!isValidPhone(datos.telefono)) {
-      return res.status(400).json({ message: "Número de teléfono inválido" });
+    if (!isValidPhone(datos.phone)) {
+      return res.status(400).json({ message: "Invalid phone number" });
     }
 
-    // Generar estructura de datos para ambos casos (llamada o wp)
+    // Generar estructura de datos para ambos casos (wp o voice)
     const newUserData = {
-      telefono: datos.telefono,
-      tipo: datos.tipo, // "llamada" o "wp"
-      nombre: datos.nombre || null,
-      cargo: datos.cargo || null,
-      empresa: datos.empresa || null,
-      consulta: datos.consulta || null, // Pregunta del usuario
+      phone: datos.phone,
+      platform: datos.platform, // "wp" o "voice"
+      name: datos.name || null,
+      jobTitle: datos.jobTitle || null,
+      company: datos.company || null,
+      inquiry: datos.inquiry || null, // Pregunta del usuario
       createdAt: new Date(),
     };
 
@@ -1447,15 +1447,19 @@ const newUserHomeApi = async (req, res) => {
 
     // Enviar datos al webhook de Tiffany
     const tiffanyWebhook = "https://hook.us1.make.com/mpn2qokb8bjqvg1fu2l7otufv4it4x3w";
-    await axios.post(tiffanyWebhook, newUserData);
+    const response = await axios.post(tiffanyWebhook, newUserData);
+
+    if (response.status === 200) {
+      console.log(`✅ Tiffany successfully connected via ${datos.platform}`);
+    }
 
     return res.status(200).json({
-      message: "Usuario registrado con éxito",
+      message: "User successfully registered",
       user: newUserData,
     });
   } catch (error) {
-    console.error("Error al registrar usuario:", error.message);
-    return res.status(500).json({ message: "Error en el servidor", error: error.message });
+    console.error("Error registering user:", error.message);
+    return res.status(500).json({ message: "Server error", error: error.message });
   } finally {
     await pool.close();
   }
