@@ -1419,57 +1419,45 @@ const newUserHomeApi = async (req, res) => {
 
   // Validar número de teléfono real
   const isValidPhone = (phone) => {
-      const phoneNumber = parsePhoneNumberFromString(phone, 'MX'); // México por defecto
-      return phoneNumber && phoneNumber.isValid();
+    const phoneNumber = parsePhoneNumberFromString(phone, 'MX'); // México por defecto
+    return phoneNumber && phoneNumber.isValid();
   };
 
   try {
-      await pool.connect();
-      const collection = pool.db('pocketux').collection('usershome');
+    await pool.connect();
+    const collection = pool.db('pocketux').collection('usershome');
 
-      if (!isValidPhone(datos.telefono)) {
-          return res.status(400).json({ message: "Número de teléfono inválido" });
-      }
+    if (!isValidPhone(datos.telefono)) {
+      return res.status(400).json({ message: "Número de teléfono inválido" });
+    }
 
-      // Prevenir múltiples intentos con el mismo número en los últimos 10 minutos
-      const last10Min = new Date(Date.now() - 10 * 60 * 1000);
-      const existingUser = await collection.findOne({
-          telefono: datos.telefono,
-          createdAt: { $gte: last10Min }
-      });
+    // Generar estructura de datos para ambos casos (llamada o wp)
+    const newUserData = {
+      telefono: datos.telefono,
+      tipo: datos.tipo, // "llamada" o "wp"
+      nombre: datos.nombre || null,
+      cargo: datos.cargo || null,
+      empresa: datos.empresa || null,
+      consulta: datos.consulta || null, // Pregunta del usuario
+      createdAt: new Date(),
+    };
 
-      if (existingUser) {
-          return res.status(429).json({ message: "Demasiados intentos. Espere unos minutos." });
-      }
+    // Guardar en MongoDB
+    await collection.insertOne(newUserData);
 
-      // Generar estructura de datos para ambos casos (llamada o wp)
-      const newUserData = {
-          telefono: datos.telefono,
-          tipo: datos.tipo,  // "llamada" o "wp"
-          nombre: datos.nombre || null,
-          cargo: datos.cargo || null,
-          empresa: datos.empresa || null,
-          consulta: datos.consulta || null,  // Pregunta del usuario
-          createdAt: new Date()
-      };
+    // Enviar datos al webhook de Tiffany
+    const tiffanyWebhook = "https://hook.us1.make.com/mpn2qokb8bjqvg1fu2l7otufv4it4x3w";
+    await axios.post(tiffanyWebhook, newUserData);
 
-      // Guardar en MongoDB
-      await collection.insertOne(newUserData);
-
-      // Enviar datos al webhook de Tiffany
-      const tiffanyWebhook = "https://hook.us1.make.com/mpn2qokb8bjqvg1fu2l7otufv4it4x3w";
-      await axios.post(tiffanyWebhook, newUserData);
-
-      return res.status(200).json({
-          message: "Usuario registrado con éxito",
-          user: newUserData
-      });
-
+    return res.status(200).json({
+      message: "Usuario registrado con éxito",
+      user: newUserData,
+    });
   } catch (error) {
-      console.error('Error al registrar usuario:', error.message);
-      return res.status(500).json({ message: "Error en el servidor", error: error.message });
+    console.error("Error al registrar usuario:", error.message);
+    return res.status(500).json({ message: "Error en el servidor", error: error.message });
   } finally {
-      await pool.close();
+    await pool.close();
   }
 };
   
