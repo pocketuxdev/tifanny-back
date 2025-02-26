@@ -3,6 +3,7 @@ const axios = require('axios');
 const moment = require('moment-timezone');
 const { v4: uuidv4 } = require('uuid');
 const CryptoJS = require('crypto-js');
+const { parsePhoneNumberFromString } = require('libphonenumber-js');
 
 
 
@@ -1271,7 +1272,7 @@ const confirmPurchaseapi = async (req, res) => {
 };
 
 
-/*---------------------------------pagina web --------------------------------------------------------------*/
+/*---------------------------------DASHBOARD --------------------------------------------------------------*/
 
 const loginClientapi = async (req, res) => {
   const { email, password } = req.body; // Datos enviados desde el cliente
@@ -1412,6 +1413,65 @@ const verifyPhoneNumberapi = async (req, res) => {
     });
   }
 };
+/*---------------------------------home --------------------------------------------------------------*/
+const newUserHomeApi = async (req, res) => {
+  const datos = req.body;
+
+  // Validar número de teléfono real
+  const isValidPhone = (phone) => {
+      const phoneNumber = parsePhoneNumberFromString(phone, 'MX'); // México por defecto
+      return phoneNumber && phoneNumber.isValid();
+  };
+
+  try {
+      await pool.connect();
+      const collection = pool.db('pocketux').collection('usershome');
+
+      if (!isValidPhone(datos.telefono)) {
+          return res.status(400).json({ message: "Número de teléfono inválido" });
+      }
+
+      // Prevenir múltiples intentos con el mismo número en los últimos 10 minutos
+      const last10Min = new Date(Date.now() - 10 * 60 * 1000);
+      const existingUser = await collection.findOne({
+          telefono: datos.telefono,
+          createdAt: { $gte: last10Min }
+      });
+
+      if (existingUser) {
+          return res.status(429).json({ message: "Demasiados intentos. Espere unos minutos." });
+      }
+
+      // Generar estructura de datos para ambos casos (llamada o wp)
+      const newUserData = {
+          telefono: datos.telefono,
+          tipo: datos.tipo,  // "llamada" o "wp"
+          nombre: datos.nombre || null,
+          cargo: datos.cargo || null,
+          empresa: datos.empresa || null,
+          consulta: datos.consulta || null,  // Pregunta del usuario
+          createdAt: new Date()
+      };
+
+      // Guardar en MongoDB
+      await collection.insertOne(newUserData);
+
+      // Enviar datos al webhook de Tiffany
+      const tiffanyWebhook = "https://hook.us1.make.com/mpn2qokb8bjqvg1fu2l7otufv4it4x3w";
+      await axios.post(tiffanyWebhook, newUserData);
+
+      return res.status(200).json({
+          message: "Usuario registrado con éxito",
+          user: newUserData
+      });
+
+  } catch (error) {
+      console.error('Error al registrar usuario:', error.message);
+      return res.status(500).json({ message: "Error en el servidor", error: error.message });
+  } finally {
+      await pool.close();
+  }
+};
   
   module.exports = {
     newClientapi,
@@ -1427,5 +1487,6 @@ const verifyPhoneNumberapi = async (req, res) => {
     updateProductapi,
     deleteProductApi,
     confirmPurchaseapi,
-    verifyPhoneNumberapi
+    verifyPhoneNumberapi,
+    newUserHomeApi
   };
