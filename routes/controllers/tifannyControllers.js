@@ -1439,6 +1439,7 @@ const newUserHomeApi = async (req, res) => {
       jobTitle: datos.jobTitle || null,
       company: datos.company || null,
       inquiry: datos.inquiry || null, // Pregunta del usuario
+      agent_type: datos.agent_type || null, // "medical", "paralegal" o "betterself"
       createdAt: new Date(),
     };
 
@@ -1464,6 +1465,7 @@ const newUserHomeApi = async (req, res) => {
     await pool.close();
   }
 };
+
   
   module.exports = {
     newClientapi,
