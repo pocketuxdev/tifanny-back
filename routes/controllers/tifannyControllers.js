@@ -1466,6 +1466,111 @@ const newUserHomeApi = async (req, res) => {
   }
 };
 
+const tryapimedicalapi = async (req, res) => {
+  const data = req.body;
+
+  try {
+    await pool.connect();
+    const collection = pool.db("pocketux").collection("testapimedical");
+
+    // Guardar datos en MongoDB
+    const storedData = {
+      ...data,
+      receivedAt: new Date(),
+    };
+    await collection.insertOne(storedData);
+
+    // Enviar datos al webhook de Tiffany
+    const tiffanyWebhook = "https://hook.us1.make.com/mpn2qokb8bjqvg1fu2l7otufv4it4x3w";
+    const response = await axios.post(tiffanyWebhook, data);
+
+    if (response.status === 200) {
+      console.log(`✅ Tiffany successfully received medical test data`);
+    }
+
+    return res.status(200).json({
+      message: "Medical API test data successfully stored and sent to Tiffany",
+      tiffany_response: response.data,
+    });
+
+  } catch (error) {
+    console.error("Error processing medical API test:", error.message);
+    return res.status(500).json({ message: "Server error", error: error.message });
+
+  } finally {
+    await pool.close();
+  }
+};
+const tryapiparalegalapi = async (req, res) => {
+  const data = req.body;
+
+  try {
+    await pool.connect();
+    const collection = pool.db("pocketux").collection("testapiparalegal");
+
+    // Guardar datos en MongoDB
+    const storedData = {
+      ...data,
+      receivedAt: new Date(),
+    };
+    await collection.insertOne(storedData);
+
+    // Enviar datos al webhook de Tiffany
+    const tiffanyWebhook = "https://hook.us1.make.com/mpn2qokb8bjqvg1fu2l7otufv4it4x3w";
+    const response = await axios.post(tiffanyWebhook, data);
+
+    if (response.status === 200) {
+      console.log(`✅ Tiffany successfully received paralegal test data`);
+    }
+
+    return res.status(200).json({
+      message: "Paralegal API test data successfully stored and sent to Tiffany",
+      tiffany_response: response.data,
+    });
+
+  } catch (error) {
+    console.error("Error processing paralegal API test:", error.message);
+    return res.status(500).json({ message: "Server error", error: error.message });
+
+  } finally {
+    await pool.close();
+  }
+};
+const tryapibetterselfapi = async (req, res) => {
+  const data = req.body;
+
+  try {
+    await pool.connect();
+    const collection = pool.db("pocketux").collection("testapibetterself");
+
+    // Guardar datos en MongoDB
+    const storedData = {
+      ...data,
+      receivedAt: new Date(),
+    };
+    await collection.insertOne(storedData);
+
+    // Enviar datos al webhook de Tiffany
+    const tiffanyWebhook = "https://hook.us1.make.com/mpn2qokb8bjqvg1fu2l7otufv4it4x3w";
+    const response = await axios.post(tiffanyWebhook, data);
+
+    if (response.status === 200) {
+      console.log(`✅ Tiffany successfully received betterself test data`);
+    }
+
+    return res.status(200).json({
+      message: "BetterSelf API test data successfully stored and sent to Tiffany",
+      tiffany_response: response.data,
+    });
+
+  } catch (error) {
+    console.error("Error processing betterself API test:", error.message);
+    return res.status(500).json({ message: "Server error", error: error.message });
+
+  } finally {
+    await pool.close();
+  }
+};
   
   module.exports = {
     newClientapi,
@@ -1482,5 +1587,8 @@ const newUserHomeApi = async (req, res) => {
     deleteProductApi,
     confirmPurchaseapi,
     verifyPhoneNumberapi,
-    newUserHomeApi
+    newUserHomeApi,
+    tryapimedicalapi,
+    tryapiparalegalapi,
+    tryapibetterselfapi
   };
