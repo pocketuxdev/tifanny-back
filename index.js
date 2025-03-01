@@ -14,7 +14,9 @@ const corsOptions = {
             'https://www.tiffany.cool',
             'https://tiffany.cool',
             'https://prueba-orcin-phi.vercel.app',
-            'https://www.prueba-orcin-phi.vercel.app'
+            'https://www.prueba-orcin-phi.vercel.app',
+            'https://homejs.vercel.app',
+            'https://www.homejs.vercel.app'
           ]
         : '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
