@@ -1571,6 +1571,95 @@ const tryapibetterselfapi = async (req, res) => {
     await pool.close();
   }
 };
+
+const registerbywebapi = async (req, res) => { 
+  const datos = req.body;
+  
+  const generateApiKey = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+      let apiKey = '';
+      for (let i = 0; i < 10; i++) {
+          apiKey += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return apiKey;
+  };
+  
+  const generatePassword = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+      let password = '';
+      for (let i = 0; i < 12; i++) {
+          password += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return password;
+  };
+  
+  try {
+      const collection = pool.db('pocketux').collection('registerweb');
+      const clientsCollection = pool.db('pocketux').collection('clients');
+      
+      const existingClient = await clientsCollection.findOne({ email: datos.email });
+      const existingTrialUser = await collection.findOne({ email: datos.email });
+      
+      if (existingClient || existingTrialUser) {
+          return res.status(409).json({ message: "El correo ya está en uso." });
+      }
+
+      const apiKey = generateApiKey();
+      const password = generatePassword();
+      const hashedPassword = CryptoJS.SHA256(password, process.env.CODE_SECRET_DATA).toString();
+      
+      const newUser = {
+          fullName: datos.fullName || null,
+          email: datos.email,
+          phone: datos.phone || null,
+          password: hashedPassword,
+          apiKey,
+          createdBy: "web",
+          createdAt: new Date()
+      };
+      
+      await collection.insertOne(newUser);
+      
+      return res.status(201).json({
+          message: "Usuario registrado en prueba.",
+          credentials: {
+              email: datos.email,
+              password
+          }
+      });
+  } catch (error) {
+      console.error('Error en registerbyweb:', error.message);
+      return res.status(500).json({ message: 'Error al registrar usuario', error: error.message });
+  }
+};
+
+// Cron job para mover usuarios después de 3 días
+taskScheduler.scheduleJob('0 0 * * *', async () => {
+  const registerCollection = pool.db('pocketux').collection('registerweb');
+  const logsCollection = pool.db('pocketux').collection('logsweb');
+  const clientsCollection = pool.db('pocketux').collection('clients');
+
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+  const expiredUsers = await registerCollection.find({ createdAt: { $lte: threeDaysAgo } }).toArray();
+
+  for (const user of expiredUsers) {
+      await logsCollection.insertOne(user);
+      await registerCollection.deleteOne({ email: user.email });
+
+      const webhookUrl = 'https://hook.us1.make.com/your-webhook-url';
+      try {
+          const response = await axios.post(webhookUrl, { email: user.email, status: "trial_ended" });
+          if (response.data.continuePlan) {
+              await clientsCollection.insertOne(user);
+          }
+      } catch (webhookError) {
+          console.error('Error enviando webhook:', webhookError.message);
+      }
+  }
+});
+
   
   module.exports = {
     newClientapi,
@@ -1590,5 +1679,6 @@ const tryapibetterselfapi = async (req, res) => {
     newUserHomeApi,
     tryapimedicalapi,
     tryapiparalegalapi,
-    tryapibetterselfapi
+    tryapibetterselfapi,
+    registerbywebapi
   };
