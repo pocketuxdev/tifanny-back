@@ -4,6 +4,8 @@ const moment = require('moment-timezone');
 const { v4: uuidv4 } = require('uuid');
 const CryptoJS = require('crypto-js');
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
+const schedule = require('node-schedule');
+
 
 
 
@@ -1634,7 +1636,7 @@ const registerbywebapi = async (req, res) => {
 };
 
 // Cron job para mover usuarios después de 3 días
-taskScheduler.scheduleJob('0 0 * * *', async () => {
+schedule.scheduleJob('0 0 * * *', async () => {
   const registerCollection = pool.db('pocketux').collection('registerweb');
   const logsCollection = pool.db('pocketux').collection('logsweb');
   const clientsCollection = pool.db('pocketux').collection('clients');
