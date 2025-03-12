@@ -1327,6 +1327,42 @@ const loginClientapi = async (req, res) => {
   }
 };
 
+// Función aparte para login de usuarios en prueba
+const loginTrialUserapi = async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const collection = pool.db('pocketux').collection('registerweb');
+    const user = await collection.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
+
+    if (!user) {
+      return res.status(404).json({ 
+        status: "Error", 
+        message: "Usuario de prueba no encontrado o expirado." 
+      });
+    }
+
+    const hashedPassword = CryptoJS.SHA256(password, process.env.CODE_SECRET_DATA).toString();
+    if (hashedPassword !== user.password) {
+      return res.status(401).json({ 
+        status: "Error", 
+        message: "Contraseña incorrecta." 
+      });
+    }
+
+    return res.status(200).json({
+      status: "Success",
+      message: `Bienvenido, ${user.fullName || 'Usuario'}. Estás en periodo de prueba.`,
+      clientData: {
+        email: user.email,
+        fullName: user.fullName || "No especificado",
+        trial: true
+      },
+    });
+  } catch (error) {
+    console.error("Error en login de prueba:", error.message);
+    return res.status(500).json({ status: "Error", message: "Error interno del servidor" });
+  }
+};
   
 
 
@@ -1682,5 +1718,6 @@ schedule.scheduleJob('0 0 * * *', async () => {
     tryapimedicalapi,
     tryapiparalegalapi,
     tryapibetterselfapi,
-    registerbywebapi
+    registerbywebapi,
+    loginTrialUserapi
   };
