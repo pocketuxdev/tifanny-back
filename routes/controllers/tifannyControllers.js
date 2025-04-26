@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const CryptoJS = require('crypto-js');
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const schedule = require('node-schedule');
+const { ObjectId } = require('mongodb');
 
 
 
@@ -1099,7 +1100,7 @@ const deleteProductApi = async (req, res) => {
           // Restaurar el estado del producto a "activo"
           await productsCollection.updateOne(
             { product_id: productId },
-            { $set: { status: "activo" }, $unset: { clientId: "" } }
+            { $set: { status: "activo", usedBy: "" }, $unset: { clientId: "" } }
           );
 
           console.log(`Cotización con ID ${result.insertedId} eliminada por expiración.`);
@@ -1699,6 +1700,216 @@ schedule.scheduleJob('0 0 * * *', async () => {
 });
 
   
+  // --- NUEVA FUNCIÓN PARA SOLICITAR GENERACIÓN DE PDF --- //
+  const requestPdfGenerationApi = async (req, res) => {
+    const userDocumentId = req.params.id; // Asumiendo que el ID viene en la ruta
+    const makeWebhookUrl = 'https://hook.us1.make.com/wuydp977jxyojgwmj7tkzqkhez7mt3sf'; // Tu webhook
+
+    if (!userDocumentId) {
+        return res.status(400).json({ message: 'Falta el ID del documento del usuario.' });
+    }
+
+    try {
+        // OJO: Usar la DB correcta. Asumo 'tiffany_legal_db' como en el frontend.
+        // Cambiar 'pocketux' si es necesario.
+        const db = pool.db('tiffany_legal_db');
+        const userDocsCollection = db.collection('active_log'); // Ajusta nombre de colección si es necesario
+        const templatesCollection = db.collection('templates'); // Ajusta nombre de colección si es necesario
+
+        // 1. Buscar el documento del usuario (convertir ID a ObjectId)
+        let objectIdToSearch;
+        try {
+            objectIdToSearch = new ObjectId(userDocumentId);
+        } catch (idError) {
+            console.error('Error convirtiendo userDocumentId a ObjectId:', idError);
+            return res.status(400).json({ message: 'ID de documento inválido.' });
+        }
+        const userDoc = await userDocsCollection.findOne({ _id: objectIdToSearch });
+
+        if (!userDoc) {
+            console.log(`Documento no encontrado para ID: ${userDocumentId}`);
+            return res.status(404).json({ message: 'Documento no encontrado' });
+        }
+
+        // 2. Buscar la plantilla asociada
+        if (!userDoc.template_id) {
+             console.log(`Documento ${userDocumentId} no tiene template_id asociado.`);
+             return res.status(400).json({ message: 'El documento no tiene una plantilla asociada.' });
+        }
+         let templateObjectId;
+         try {
+             // Asumiendo que template_id también es un ObjectId guardado como string o ObjectId
+             templateObjectId = typeof userDoc.template_id === 'string' ? new ObjectId(userDoc.template_id) : userDoc.template_id;
+         } catch (idError) {
+             console.error('Error convirtiendo template_id a ObjectId:', idError);
+             return res.status(400).json({ message: 'ID de plantilla inválido en el documento.' });
+         }
+        const template = await templatesCollection.findOne({ _id: templateObjectId });
+
+        if (!template) {
+             console.log(`Plantilla no encontrada para ID: ${userDoc.template_id}`);
+            return res.status(404).json({ message: 'Plantilla base no encontrada' });
+        }
+
+        // 3. Extraer TODOS los placeholders del template específico
+        const filledValues = userDoc.filled_values || {};
+        const placeholderRegex = /\[([A-Z0-9_]+)\]/g; // Regex para encontrar [PLACEHOLDER]
+        const foundPlaceholders = new Set();
+
+        if (template.sections && Array.isArray(template.sections)) {
+            template.sections.forEach(section => {
+                const content = section.content || '';
+                let match;
+                while ((match = placeholderRegex.exec(content)) !== null) {
+                    // Añadir el nombre del placeholder (grupo 1) al Set
+                    foundPlaceholders.add(match[1]);
+                }
+                // Reiniciar el índice del regex para la próxima sección si es necesario
+                placeholderRegex.lastIndex = 0;
+            });
+        }
+        // Convertir el Set a un Array de placeholders requeridos dinámicamente
+        const requiredPlaceholders = [...foundPlaceholders];
+        console.log(`Placeholders requeridos encontrados para template ${template._id}:`, requiredPlaceholders);
+
+        // 4. Validar que todos los placeholders encontrados tengan valor en filledValues
+        const missingOrEmptyFields = requiredPlaceholders.filter(
+            placeholder => !filledValues[placeholder] || String(filledValues[placeholder]).trim() === ''
+        );
+
+        // ---> OPCIONAL: Añadir validación extra para campos siempre necesarios (ej: email/teléfono para Make)
+        // const alwaysRequired = ['CLIENTE_EMAIL', 'CLIENTE_TELEFONO']; // Ajusta los nombres reales
+        // alwaysRequired.forEach(field => {
+        //     if ((!filledValues[field] || String(filledValues[field]).trim() === '') && !missingOrEmptyFields.includes(field)) {
+        //         missingOrEmptyFields.push(field); 
+        //     }
+        // });
+        // <--- FIN OPCIONAL
+
+        if (missingOrEmptyFields.length > 0) {
+            console.log(`Faltan valores para placeholders requeridos en ${userDocumentId}: ${missingOrEmptyFields.join(', ')}`);
+            return res.status(400).json({
+                message: `Faltan datos para completar el documento basado en la plantilla. Campos requeridos: ${missingOrEmptyFields.join(', ')}`,
+                missingFields: missingOrEmptyFields
+            });
+        }
+
+        // 5. Preparar el HTML para el PDF (Si la validación pasa)
+        let pdfHtmlString = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${template.title || 'Documento'}</title><style>body{font-family:sans-serif;font-size:10pt;}</style></head><body>`;
+        pdfHtmlString += `<h1>${template.title || 'Documento'}</h1>`;
+
+        // --- Lógica de Reemplazo (Usar la lista validada) ---
+        if (template.sections && Array.isArray(template.sections)) {
+            template.sections.forEach(section => {
+                 let sectionContent = section.content || '';
+                 // Iterar sobre los placeholders encontrados y reemplazar
+                 requiredPlaceholders.forEach(key => {
+                      const placeholder = `[${key}]`;
+                      const escapedPlaceholder = placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                      const regex = new RegExp(escapedPlaceholder, 'g');
+                      // Usar el valor validado (sabemos que existe y no está vacío)
+                      sectionContent = sectionContent.replace(regex, `<strong>${filledValues[key]}</strong>`);
+                 });
+
+                // Manejo de tipos y saltos de línea
+                sectionContent = sectionContent.replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
+
+                if (section.type === 'heading') {
+                     pdfHtmlString += `<h${section.level || 2}>${sectionContent}</h${section.level || 2}>`;
+                 } else if (section.type === 'numbered_clause') {
+                     pdfHtmlString += `<p><strong>${section.number || ''}: ${section.title || ''}.-</strong> ${sectionContent}</p>`;
+                 } else { // Asumir paragraph u otros tipos simples
+                     pdfHtmlString += `<p>${sectionContent}</p>`;
+                 }
+            });
+        }
+        // --- Fin Lógica de Reemplazo ---
+
+        pdfHtmlString += '</body></html>';
+
+        // 6. Preparar datos para Make.com
+        const pdfFilename = `${template._id}_${userDocumentId}_final.pdf`;
+        const payloadToMake = {
+            userDocumentId: userDocumentId,
+            templateId: template._id.toString(),
+            pdfHtmlContent: pdfHtmlString,
+            suggestedFilename: pdfFilename,
+            // Pasar también los valores por si Make los necesita
+            filledValues: filledValues 
+        };
+
+        // 7. Enviar datos a Make.com
+        console.log(`Enviando solicitud de PDF a Make.com para ${userDocumentId}`);
+        await axios.post(makeWebhookUrl, payloadToMake);
+        console.log(`Solicitud enviada exitosamente a Make.com para ${userDocumentId}`);
+
+        // 8. Responder al frontend
+        res.status(200).json({
+            message: 'Solicitud de generación de PDF enviada a Make.com exitosamente.',
+            userDocumentId: userDocumentId,
+            filename: pdfFilename
+        });
+
+    } catch (error) {
+        console.error('Error en requestPdfGenerationApi:', error);
+        if (error.isAxiosError) {
+             console.error('Error de Axios:', error.response?.status, error.response?.data);
+             return res.status(502).json({ message: 'Error al enviar la solicitud al servicio de generación de PDF (Make.com).', detail: error.message });
+        }
+        res.status(500).json({ message: 'Error interno del servidor al procesar la solicitud de PDF.', error: error.message });
+    }
+  };
+
+  // --- NUEVA FUNCIÓN PARA VERIFICAR ESTADO DEL PDF --- //
+  const getPdfStatusApi = async (req, res) => {
+      const userDocumentId = req.params.id;
+
+      if (!userDocumentId) {
+          return res.status(400).json({ message: 'Falta el ID del documento del usuario.' });
+      }
+
+      try {
+          const db = pool.db('tiffany_legal_db'); // Ajusta si es necesario
+          const userDocsCollection = db.collection('active_log'); // Ajusta si es necesario
+
+          let objectIdToSearch;
+          try {
+              objectIdToSearch = new ObjectId(userDocumentId);
+          } catch (idError) {
+              return res.status(400).json({ message: 'ID de documento inválido.' });
+          }
+
+          // Buscar solo los campos necesarios (_id y pdf_download_url)
+          const userDoc = await userDocsCollection.findOne(
+              { _id: objectIdToSearch },
+              { projection: { pdf_download_url: 1 } } // Solo traer el campo de la URL
+          );
+
+          if (!userDoc) {
+              return res.status(404).json({ message: 'Documento no encontrado' });
+          }
+
+          if (userDoc.pdf_download_url) {
+              // ¡PDF Listo! Devolver la URL
+              console.log(`PDF listo para ${userDocumentId}, URL: ${userDoc.pdf_download_url}`);
+              return res.status(200).json({
+                  status: 'ready',
+                  url: userDoc.pdf_download_url
+              });
+          } else {
+              // PDF Aún no está listo
+              console.log(`PDF aún no listo para ${userDocumentId}`);
+              return res.status(202).json({ // 202 Accepted (indica que está en proceso)
+                  status: 'processing'
+              });
+          }
+
+      } catch (error) {
+          console.error('Error en getPdfStatusApi:', error);
+          res.status(500).json({ message: 'Error interno al verificar estado del PDF.', error: error.message });
+      }
+  };
+
   module.exports = {
     newClientapi,
     getAllClientsapi,
@@ -1719,5 +1930,7 @@ schedule.scheduleJob('0 0 * * *', async () => {
     tryapiparalegalapi,
     tryapibetterselfapi,
     registerbywebapi,
-    loginTrialUserapi
+    loginTrialUserapi,
+    requestPdfGenerationApi,
+    getPdfStatusApi // <<< Exportar la nueva función de status
   };
