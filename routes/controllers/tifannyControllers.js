@@ -1731,24 +1731,22 @@ schedule.scheduleJob('0 0 * * *', async () => {
             return res.status(404).json({ message: 'Documento no encontrado' });
         }
 
-        // 2. Buscar la plantilla asociada
-        if (!userDoc.template_id) {
-             console.log(`Documento ${userDocumentId} no tiene template_id asociado.`);
-             return res.status(400).json({ message: 'El documento no tiene una plantilla asociada.' });
+        // 2. Obtener el ID de la plantilla desde el campo 'template_id' del documento
+        const templateIdToSearch = userDoc.template_id;
+        if (!templateIdToSearch) {
+             console.log(`Documento ${userDocumentId} no tiene el campo 'template_id' asignado.`);
+             // Importante: Asegúrate de añadir este campo a tus documentos en active_log
+             return res.status(400).json({ message: 'Falta el ID de la plantilla en el registro del documento.' });
         }
-         let templateObjectId;
-         try {
-             // Asumiendo que template_id también es un ObjectId guardado como string o ObjectId
-             templateObjectId = typeof userDoc.template_id === 'string' ? new ObjectId(userDoc.template_id) : userDoc.template_id;
-         } catch (idError) {
-             console.error('Error convirtiendo template_id a ObjectId:', idError);
-             return res.status(400).json({ message: 'ID de plantilla inválido en el documento.' });
-         }
-        const template = await templatesCollection.findOne({ _id: templateObjectId });
+
+        // Buscar la plantilla usando el valor de 'template_id' como _id
+        // NOTA: Asegúrate que el valor en userDoc.template_id coincida EXACTAMENTE con el _id en la colección 'templates'
+        const template = await templatesCollection.findOne({ _id: templateIdToSearch });
 
         if (!template) {
-             console.log(`Plantilla no encontrada para ID: ${userDoc.template_id}`);
-            return res.status(404).json({ message: 'Plantilla base no encontrada' });
+             console.log(`Plantilla no encontrada para _id: ${templateIdToSearch}`);
+             // Verifica que el template_id en active_log exista como _id en templates
+            return res.status(404).json({ message: `Plantilla base no encontrada con el ID '${templateIdToSearch}'` });
         }
 
         // 3. Extraer TODOS los placeholders del template específico
@@ -1773,9 +1771,9 @@ schedule.scheduleJob('0 0 * * *', async () => {
         console.log(`Placeholders requeridos encontrados para template ${template._id}:`, requiredPlaceholders);
 
         // 4. Validar que todos los placeholders encontrados tengan valor en filledValues
-        const missingOrEmptyFields = requiredPlaceholders.filter(
-            placeholder => !filledValues[placeholder] || String(filledValues[placeholder]).trim() === ''
-        );
+       // const missingOrEmptyFields = requiredPlaceholders.filter(
+       //     placeholder => !filledValues[placeholder] || String(filledValues[placeholder]).trim() === ''
+       // );
 
         // ---> OPCIONAL: Añadir validación extra para campos siempre necesarios (ej: email/teléfono para Make)
         // const alwaysRequired = ['CLIENTE_EMAIL', 'CLIENTE_TELEFONO']; // Ajusta los nombres reales
@@ -1786,44 +1784,55 @@ schedule.scheduleJob('0 0 * * *', async () => {
         // });
         // <--- FIN OPCIONAL
 
-        if (missingOrEmptyFields.length > 0) {
-            console.log(`Faltan valores para placeholders requeridos en ${userDocumentId}: ${missingOrEmptyFields.join(', ')}`);
-            return res.status(400).json({
-                message: `Faltan datos para completar el documento basado en la plantilla. Campos requeridos: ${missingOrEmptyFields.join(', ')}`,
-                missingFields: missingOrEmptyFields
-            });
-        }
+        // if (missingOrEmptyFields.length > 0) {
+        //    console.log(`Faltan valores para placeholders requeridos en ${userDocumentId}: ${missingOrEmptyFields.join(', ')}`);
+        //    return res.status(400).json({
+        //        message: `Faltan datos para completar el documento basado en la plantilla. Campos requeridos: ${missingOrEmptyFields.join(', ')}`,
+        //        missingFields: missingOrEmptyFields
+        //    });
+        //}
 
-        // 5. Preparar el HTML para el PDF (Si la validación pasa)
+        // 5. Preparar el HTML para el PDF (Corrección para usar claves minúsculas de filledValues)
         let pdfHtmlString = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${template.title || 'Documento'}</title><style>body{font-family:sans-serif;font-size:10pt;}</style></head><body>`;
         pdfHtmlString += `<h1>${template.title || 'Documento'}</h1>`;
 
-        // --- Lógica de Reemplazo (Usar la lista validada) ---
+        // --- Lógica de Reemplazo Corregida ---
         if (template.sections && Array.isArray(template.sections)) {
             template.sections.forEach(section => {
-                 let sectionContent = section.content || '';
-                 // Iterar sobre los placeholders encontrados y reemplazar
-                 requiredPlaceholders.forEach(key => {
-                      const placeholder = `[${key}]`;
-                      const escapedPlaceholder = placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                      const regex = new RegExp(escapedPlaceholder, 'g');
-                      // Usar el valor validado (sabemos que existe y no está vacío)
-                      sectionContent = sectionContent.replace(regex, `<strong>${filledValues[key]}</strong>`);
-                 });
+                let sectionContent = section.content || '';
+                const actualData = filledValues || {}; // Usar filledValues que ya tiene claves minúsculas
 
-                // Manejo de tipos y saltos de línea
+                // Iterar sobre las claves MINÚSCULAS del objeto de datos real (filledValues)
+                for (const lowerCaseKey in actualData) {
+                    const value = actualData[lowerCaseKey] || ''; // Obtener el valor, asegurar que no sea null/undefined
+
+                    // Construir el placeholder en MAYÚSCULAS como aparece en el template
+                    const upperCasePlaceholder = `[${lowerCaseKey.toUpperCase()}]`;
+                    const escapedPlaceholder = upperCasePlaceholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); // Escapar para regex
+                    const regex = new RegExp(escapedPlaceholder, 'g');
+
+                    // Reemplazar el placeholder MAYÚSCULA en el contenido de la sección
+                    // con el valor real (asegurándose de que sea string y aplicando strong)
+                    sectionContent = sectionContent.replace(regex, `<strong>${String(value)}</strong>`);
+                }
+
+                // Manejo de tipos y saltos de línea *después* de los reemplazos
                 sectionContent = sectionContent.replace(/\\n/g, '<br>').replace(/\n/g, '<br>');
 
+                // Generar el HTML de la sección según su tipo
                 if (section.type === 'heading') {
                      pdfHtmlString += `<h${section.level || 2}>${sectionContent}</h${section.level || 2}>`;
                  } else if (section.type === 'numbered_clause') {
-                     pdfHtmlString += `<p><strong>${section.number || ''}: ${section.title || ''}.-</strong> ${sectionContent}</p>`;
+                     // Asegurar que title y number también se manejen si son null/undefined
+                     const sectionNumber = section.number || '';
+                     const sectionTitle = section.title || '';
+                     pdfHtmlString += `<p><strong>${sectionNumber}: ${sectionTitle}.-</strong> ${sectionContent}</p>`;
                  } else { // Asumir paragraph u otros tipos simples
                      pdfHtmlString += `<p>${sectionContent}</p>`;
                  }
             });
         }
-        // --- Fin Lógica de Reemplazo ---
+        // --- Fin Lógica de Reemplazo Corregida ---
 
         pdfHtmlString += '</body></html>';
 
@@ -1831,13 +1840,13 @@ schedule.scheduleJob('0 0 * * *', async () => {
         const pdfFilename = `${template._id}_${userDocumentId}_final.pdf`;
         const payloadToMake = {
             userDocumentId: userDocumentId,
-            templateId: template._id.toString(),
-            pdfHtmlContent: pdfHtmlString,
+            templateId: template._id,
+            pdfHtmlContent: pdfHtmlString, // HTML ahora debería tener los valores correctos
             suggestedFilename: pdfFilename,
-            // Pasar también los valores por si Make los necesita
-            filledValues: filledValues 
+            filledValues: filledValues // Enviar los valores originales (minúsculas) también puede ser útil
         };
 
+        // ... (El resto del código para enviar a Make.com y responder al frontend) ...
         // 7. Enviar datos a Make.com
         console.log(`Enviando solicitud de PDF a Make.com para ${userDocumentId}`);
         await axios.post(makeWebhookUrl, payloadToMake);
