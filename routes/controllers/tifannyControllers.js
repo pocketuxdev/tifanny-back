@@ -6,6 +6,7 @@ const CryptoJS = require('crypto-js');
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const schedule = require('node-schedule');
 const { ObjectId } = require('mongodb');
+const { getDb } = require('../../database/mongo');
 
 
 
@@ -41,8 +42,9 @@ const newClientapi = async (req, res) => {
     };
   
     try {
+        const db = await getDb(); // Add this line
         // Verificar si la colección 'clients' existe, si no, crearla
-        const collection = pool.db('pocketux').collection('clients');
+        const collection = db.collection('clients'); // Change pool.db(...) to db
   
         // Verificar si el cliente ya existe usando el campo "id" (cédula)
         const existingClient = await collection.findOne({ id: datos.id });
@@ -150,8 +152,9 @@ const newClientapi = async (req, res) => {
   
   const getAllClientsapi = async (req, res) => {
     try {
+      const db = await getDb(); // Add this line
       // Conectarse a la colección 'clients' en la base de datos 'pocketux'
-      const collection = pool.db('pocketux').collection('clients');
+      const collection = db.collection('clients'); // Change pool.db(...) to db
       
       // Obtener todos los clientes registrados en la colección
       const clients = await collection.find({}).toArray();
@@ -187,6 +190,7 @@ const newClientapi = async (req, res) => {
     const { id, phone, email, fullName, companyName, companyId, password } = req.query; // Agregamos password
   
     try {
+      const db = await getDb(); // Add this line
       // Verificar que al menos uno de los parámetros esté presente
       if (!id && !phone && !email && !fullName && !companyName && !companyId && !password) {
         return res.status(201).json({ 
@@ -206,7 +210,7 @@ const newClientapi = async (req, res) => {
       if (password) filters.password = password; // Agregamos búsqueda por password
   
       // Conectarse a la colección 'clients' en la base de datos 'pocketux'
-      const collection = pool.db('pocketux').collection('clients');
+      const collection = db.collection('clients'); // Change pool.db(...) to db
   
       // Buscar el cliente con los filtros aplicados
       const client = await collection.findOne(filters);
@@ -271,9 +275,10 @@ const newClientapi = async (req, res) => {
     const newData = req.body; // Datos nuevos que se desean actualizar
   
     try {
+      const db = await getDb(); // Add this line
       // Conexión a las colecciones 'clients' y 'clientChangesLog'
-      const clientsCollection = pool.db('pocketux').collection('clients');
-      const changesLogCollection = pool.db('pocketux').collection('clientChangesLog');
+      const clientsCollection = db.collection('clients'); // Change pool.db(...) to db
+      const changesLogCollection = db.collection('clientChangesLog'); // Change pool.db(...) to db
   
       // Obtener los datos actuales del cliente
       const existingClient = await clientsCollection.findOne({ id });
@@ -418,9 +423,10 @@ const newClientapi = async (req, res) => {
     const deletedBy = "admin"; // Usuario que realiza la eliminación (puedes ajustarlo dinámicamente)
   
     try {
+      const db = await getDb(); // Add this line
       // Conexión a las colecciones
-      const clientsCollection = pool.db('pocketux').collection('clients');
-      const historyCollection = pool.db('pocketux').collection('clientshistory');
+      const clientsCollection = db.collection('clients'); // Change pool.db(...) to db
+      const historyCollection = db.collection('clientshistory'); // Change pool.db(...) to db
   
       // Buscar al cliente en la colección clients
       const clientToDelete = await clientsCollection.findOne({ id });
@@ -537,7 +543,8 @@ const newClientapi = async (req, res) => {
     }
   
     try {
-      const productsCollection = pool.db('pocketux').collection('products');
+      const db = await getDb(); // Add this line
+      const productsCollection = db.collection('products'); // Change pool.db(...) to db
   
       // Generar el ID único para el producto
       const newProduct = {
@@ -609,7 +616,8 @@ const newClientapi = async (req, res) => {
 
   const getAllProductsapi = async (req, res) => {
     try {
-      const productsCollection = pool.db('pocketux').collection('products');
+      const db = await getDb(); // Add this line
+      const productsCollection = db.collection('products'); // Change pool.db(...) to db
   
       // Obtener todos los productos de la colección
       const products = await productsCollection.find().toArray();
@@ -685,7 +693,8 @@ const newClientapi = async (req, res) => {
     }
 
     try {
-        const productsCollection = pool.db('pocketux').collection('products');
+        const db = await getDb(); // Add this line
+        const productsCollection = db.collection('products'); // Change pool.db(...) to db
 
         // Buscar producto específico basado en los campos proporcionados en la query
         const product = await productsCollection.findOne(query);
@@ -777,8 +786,9 @@ const updateProductapi = async (req, res) => {
   }
 
   try {
-    const productsCollection = pool.db('pocketux').collection('products');
-    const logsCollection = pool.db('pocketux').collection('logProduct'); // Colección para los logs de actualización
+    const db = await getDb(); // Add this line
+    const productsCollection = db.collection('products'); // Change pool.db(...) to db
+    const logsCollection = db.collection('logProduct'); // Change pool.db(...) to db // Colección para los logs de actualización
 
     // Buscar el producto actual
     const product = await productsCollection.findOne({ product_id });
@@ -896,8 +906,9 @@ const deleteProductApi = async (req, res) => {
   }
 
   try {
-    const productsCollection = pool.db('pocketux').collection('products');
-    const productHistoryCollection = pool.db('pocketux').collection('productshistory'); // Nueva colección de historial de productos
+    const db = await getDb(); // Add this line
+    const productsCollection = db.collection('products'); // Change pool.db(...) to db
+    const productHistoryCollection = db.collection('productshistory'); // Change pool.db(...) to db // Nueva colección de historial de productos
 
     // Buscar el producto
     const product = await productsCollection.findOne({ product_id });
@@ -998,10 +1009,11 @@ const deleteProductApi = async (req, res) => {
   const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
 
   try {
+    const db = await getDb(); // Add this line
     // Conexión a las colecciones
-    const clientsCollection = pool.db('pocketux').collection('clients');
-    const productsCollection = pool.db('pocketux').collection('products');
-    const quotationsCollection = pool.db('pocketux').collection('quotations');
+    const clientsCollection = db.collection('clients'); // Change pool.db(...) to db
+    const productsCollection = db.collection('products'); // Change pool.db(...) to db
+    const quotationsCollection = db.collection('quotations'); // Change pool.db(...) to db
 
     // Obtener el cliente por su ID
     const client = await clientsCollection.findOne({ id: clientId });
@@ -1148,10 +1160,11 @@ const confirmPurchaseapi = async (req, res) => {
   const tiffanyWebhook = 'https://hook.us1.make.com/4auymefrnm62pi5vjfs9eziaskhoc9uc';
 
   try {
+    const db = await getDb(); // Add this line
     // Conexión a las colecciones
-    const quotationsCollection = pool.db('pocketux').collection('quotations');
-    const productsCollection = pool.db('pocketux').collection('products');
-    const purchasesCollection = pool.db('pocketux').collection('purchases');
+    const quotationsCollection = db.collection('quotations'); // Change pool.db(...) to db
+    const productsCollection = db.collection('products'); // Change pool.db(...) to db
+    const purchasesCollection = db.collection('purchases'); // Change pool.db(...) to db
 
     // Buscar la cotización correspondiente
     const quotation = await quotationsCollection.findOne({ clientId, productId });
@@ -1281,8 +1294,9 @@ const loginClientapi = async (req, res) => {
   const { email, password } = req.body; // Datos enviados desde el cliente
 
   try {
+    const db = await getDb(); // Add this line
     // Conexión a la base de datos y acceso a la colección 'clients'
-    const collection = pool.db('pocketux').collection('clients');
+    const collection = db.collection('clients'); // Change pool.db(...) to db
     
     // Buscar al usuario por el campo 'email' (case-insensitive)
     const user = await collection.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
@@ -1332,7 +1346,8 @@ const loginClientapi = async (req, res) => {
 const loginTrialUserapi = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const collection = pool.db('pocketux').collection('registerweb');
+    const db = await getDb(); // Add this line
+    const collection = db.collection('registerweb'); // Change pool.db(...) to db
     const user = await collection.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
 
     if (!user) {
@@ -1372,8 +1387,9 @@ const verifyPhoneNumberapi = async (req, res) => {
   const tiffanyWebhook = 'https://hook.us1.make.com/r00ckvp8vqste3n1oyy1s6srb8ho8x3o';
 
   try {
+    const db = await getDb(); // Replace client.db with call to getDb()
     // Conexión a la base de datos y acceso a la colección 'clients'
-    const db = client.db('pocketux');
+    // const db = client.db('pocketux'); // Remove this line
     const collection = db.collection('clients');
 
     // Buscar el cliente por el número de teléfono
@@ -1463,8 +1479,9 @@ const newUserHomeApi = async (req, res) => {
   };
 
   try {
-    await pool.connect();
-    const collection = pool.db("pocketux").collection("usershome");
+    // await pool.connect(); // Remove this line
+    const db = await getDb(); // Add this line
+    const collection = db.collection("usershome"); // Change pool.db(...) to db
 
     if (!isValidPhone(datos.phone)) {
       return res.status(400).json({ message: "Invalid phone number" });
@@ -1501,7 +1518,7 @@ const newUserHomeApi = async (req, res) => {
     console.error("Error registering user:", error.message);
     return res.status(500).json({ message: "Server error", error: error.message });
   } finally {
-    await pool.close();
+    // await pool.close(); // Remove this line
   }
 };
 
@@ -1509,8 +1526,9 @@ const tryapimedicalapi = async (req, res) => {
   const data = req.body;
 
   try {
-    await pool.connect();
-    const collection = pool.db("pocketux").collection("testapimedical");
+    // await pool.connect(); // Remove this line
+    const db = await getDb(); // Add this line
+    const collection = db.collection("testapimedical"); // Change pool.db(...) to db
 
     // Guardar datos en MongoDB
     const storedData = {
@@ -1537,15 +1555,16 @@ const tryapimedicalapi = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: error.message });
 
   } finally {
-    await pool.close();
+    // await pool.close(); // Remove this line
   }
 };
 const tryapiparalegalapi = async (req, res) => {
   const data = req.body;
 
   try {
-    await pool.connect();
-    const collection = pool.db("pocketux").collection("testapiparalegal");
+    // await pool.connect(); // Remove this line
+    const db = await getDb(); // Add this line
+    const collection = db.collection("testapiparalegal"); // Change pool.db(...) to db
 
     // Guardar datos en MongoDB
     const storedData = {
@@ -1572,15 +1591,16 @@ const tryapiparalegalapi = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: error.message });
 
   } finally {
-    await pool.close();
+    // await pool.close(); // Remove this line
   }
 };
 const tryapibetterselfapi = async (req, res) => {
   const data = req.body;
 
   try {
-    await pool.connect();
-    const collection = pool.db("pocketux").collection("testapibetterself");
+    // await pool.connect(); // Remove this line
+    const db = await getDb(); // Add this line
+    const collection = db.collection("testapibetterself"); // Change pool.db(...) to db
 
     // Guardar datos en MongoDB
     const storedData = {
@@ -1607,7 +1627,7 @@ const tryapibetterselfapi = async (req, res) => {
     return res.status(500).json({ message: "Server error", error: error.message });
 
   } finally {
-    await pool.close();
+    // await pool.close(); // Remove this line
   }
 };
 
@@ -1633,8 +1653,9 @@ const registerbywebapi = async (req, res) => {
   };
   
   try {
-      const collection = pool.db('pocketux').collection('registerweb');
-      const clientsCollection = pool.db('pocketux').collection('clients');
+      const db = await getDb(); // Add this line
+      const collection = db.collection('registerweb'); // Change pool.db(...) to db
+      const clientsCollection = db.collection('clients'); // Change pool.db(...) to db
       
       const existingClient = await clientsCollection.findOne({ email: datos.email });
       const existingTrialUser = await collection.findOne({ email: datos.email });
@@ -1674,9 +1695,10 @@ const registerbywebapi = async (req, res) => {
 
 // Cron job para mover usuarios después de 3 días
 schedule.scheduleJob('0 0 * * *', async () => {
-  const registerCollection = pool.db('pocketux').collection('registerweb');
-  const logsCollection = pool.db('pocketux').collection('logsweb');
-  const clientsCollection = pool.db('pocketux').collection('clients');
+  const db = await getDb(); // Add this line
+  const registerCollection = db.collection('registerweb'); // Change pool.db(...) to db
+  const logsCollection = db.collection('logsweb'); // Change pool.db(...) to db
+  const clientsCollection = db.collection('clients'); // Change pool.db(...) to db
 
   const threeDaysAgo = new Date();
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
@@ -1710,9 +1732,10 @@ schedule.scheduleJob('0 0 * * *', async () => {
     }
 
     try {
+        const db = await getDb(); // Replace pool.db(...) with getDb()
         // OJO: Usar la DB correcta. Asumo 'tiffany_legal_db' como en el frontend.
         // Cambiar 'pocketux' si es necesario.
-        const db = pool.db('tiffany_legal_db');
+        // const db = pool.db('tiffany_legal_db'); // Remove this line
         const userDocsCollection = db.collection('active_log'); // Ajusta nombre de colección si es necesario
         const templatesCollection = db.collection('templates'); // Ajusta nombre de colección si es necesario
 
@@ -1869,7 +1892,8 @@ schedule.scheduleJob('0 0 * * *', async () => {
       }
 
       try {
-          const db = pool.db('tiffany_legal_db'); // Ajusta si es necesario
+          const db = await getDb(); // Replace pool.db(...) with getDb()
+          // const db = pool.db('tiffany_legal_db'); // Remove this line // Ajusta si es necesario
           const userDocsCollection = db.collection('active_log'); // Ajusta si es necesario
 
           let objectIdToSearch;
